@@ -18,7 +18,7 @@
 # CI Job Lease Simulator Configuration
 
 # Maximum number of concurrent active leases
-maxActiveLeases: 30
+maxActiveLeases: 35
 
 # Maximum time to wait for a job to complete before considering it timed out
 jobTimeoutDuration: 5h15m
@@ -86,6 +86,14 @@ jobs:
     triggerType: "cron"
     cronSchedule: "0 3 * * 1-4" 
     
+  - name: "ocp-4.19-e2e-tech-preview-ovn-remote-libvirt-multi-p-p"
+    version: "4.19"
+    scenario: "ocp-e2e-tech-preview-ovn-remote-libvirt-multi-p-p"
+    payloadType: "multi"
+    duration: 5h
+    triggerType: "release-controller"
+    isReleaseController: true
+    
   # - name: "ocp-4.18-e2e-ovn-remote-libvirt-multi-p-p"
   #   version: "4.18"
   #   scenario: "ocp-e2e-ovn-remote-libvirt-multi-p-p"
@@ -137,6 +145,14 @@ jobs:
     isReleaseController: true
     # triggerType: "cron"
     # cronSchedule: "0 6 * * 1-4"
+
+  - name: "ocp-4.18-e2e-tech-preview-ovn-remote-libvirt-multi-p-p"
+    version: "4.18"
+    scenario: "ocp-e2e-tech-preview-ovn-remote-libvirt-multi-p-p"
+    payloadType: "multi"
+    duration: 5h
+    triggerType: "release-controller"
+    isReleaseController: true
 
   # - name: "ocp-4.17-e2e-ovn-remote-libvirt-multi-p-p"
   #   version: "4.17"
@@ -190,6 +206,14 @@ jobs:
     # triggerType: "cron"
     # cronSchedule: "0 9 * * 1-4" 
 
+  - name: "ocp-4.17-e2e-tech-preview-ovn-remote-libvirt-multi-p-p"
+    version: "4.17"
+    scenario: "ocp-e2e-tech-preview-ovn-remote-libvirt-multi-p-p"
+    payloadType: "multi"
+    duration: 5h
+    triggerType: "release-controller"
+    isReleaseController: true
+
   # - name: "ocp-4.16-e2e-ovn-remote-libvirt-multi-p-p"
   #   version: "4.16"
   #   scenario: "ocp-e2e-ovn-remote-libvirt-multi-p-p"
@@ -242,6 +266,14 @@ jobs:
     # triggerType: "cron"
     # cronSchedule: "0 12 * * 1-4" 
 
+  - name: "ocp-4.16-e2e-tech-preview-ovn-remote-libvirt-multi-p-p"
+    version: "4.16"
+    scenario: "ocp-e2e-tech-preview-ovn-remote-libvirt-multi-p-p"
+    payloadType: "multi"
+    duration: 5h
+    triggerType: "release-controller"
+    isReleaseController: true
+
   # - name: "ocp-4.15-e2e-ovn-remote-libvirt-multi-p-p"
   #   version: "4.15"
   #   scenario: "ocp-e2e-ovn-remote-libvirt-multi-p-p"
@@ -293,6 +325,14 @@ jobs:
     isReleaseController: true    
     # triggerType: "cron"
     # cronSchedule: "0 15 * * 1-4" 
+
+  - name: "ocp-4.15-e2e-tech-preview-ovn-remote-libvirt-multi-p-p"
+    version: "4.15"
+    scenario: "ocp-e2e-tech-preview-ovn-remote-libvirt-multi-p-p"
+    payloadType: "multi"
+    duration: 5h
+    triggerType: "release-controller"
+    isReleaseController: true
 
 ### Dev ###
   # - name: "ocp-4.20-e2e-ovn-remote-libvirt-multi-p-p"
