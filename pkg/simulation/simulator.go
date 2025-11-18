@@ -66,20 +66,26 @@ func (s *Simulator) Run() error {
 // generateJobInstances generates all job instances for the simulation period
 func (s *Simulator) generateJobInstances() []*config.JobInstance {
 	instances := []*config.JobInstance{}
+	releaseControllerJobs := []*config.Job{}
 
 	for i := range s.config.Jobs {
 		job := &s.config.Jobs[i]
 
-		if job.TriggerType == config.TriggerTypeCron {
+		switch job.TriggerType {
+		case config.TriggerTypeCron:
 			// Parse cron schedule and generate instances
 			cronInstances := s.generateCronInstances(job)
 			instances = append(instances, cronInstances...)
-		} else if job.TriggerType == config.TriggerTypeReleaseController {
-			// For release controller jobs, we'll generate random instances
-			// For simplicity, let's assume they trigger every 8-12 hours with some randomness
-			rcInstances := s.generateReleaseControllerInstances(job)
-			instances = append(instances, rcInstances...)
+		case config.TriggerTypeReleaseController:
+			// Collect all release controller jobs to process together
+			releaseControllerJobs = append(releaseControllerJobs, job)
 		}
+	}
+
+	// Generate instances for all release controller jobs at the same release events
+	if len(releaseControllerJobs) > 0 {
+		rcInstances := s.generateReleaseControllerInstances(releaseControllerJobs)
+		instances = append(instances, rcInstances...)
 	}
 
 	return instances
@@ -115,24 +121,53 @@ func (s *Simulator) generateCronInstances(job *config.Job) []*config.JobInstance
 	return instances
 }
 
-// generateReleaseControllerInstances generates job instances for release controller jobs
-func (s *Simulator) generateReleaseControllerInstances(job *config.Job) []*config.JobInstance {
-	instances := []*config.JobInstance{}
+// generateReleaseEvents generates release trigger times for a specific version
+func (s *Simulator) generateReleaseEvents() []time.Time {
+	releaseEvents := []time.Time{}
 
-	// For release controller jobs, we'll generate instances at somewhat random intervals
-	// Let's assume an average of one trigger every 10 hours, but with some variation
+	// Generate release events at somewhat random intervals
+	// Average of one release every 6 hours
 	currentTime := s.simulationStart
 
 	for currentTime.Before(s.simulationEnd) {
-		startTime := currentTime.Add(time.Duration(rand.Intn(8)) * time.Hour)
-		instances = append(instances, &config.JobInstance{
-			Job:       job,
-			StartTime: startTime,
-			EndTime:   startTime.Add(job.Duration),
-		})
+		releaseEvents = append(releaseEvents, currentTime)
 
-		// Next trigger in 6-10 hours (simplified random)
-		currentTime = startTime.Add(6*time.Hour + time.Duration(rand.Intn(4))*time.Hour)
+		// Next release in 4-8 hours (random interval, averaging ~6 hours)
+		currentTime = currentTime.Add(4*time.Hour + time.Duration(rand.Intn(5))*time.Hour)
+	}
+
+	return releaseEvents
+}
+
+// generateReleaseControllerInstances generates job instances for all release controller jobs
+// Jobs are grouped by version, and each version has independent release events
+func (s *Simulator) generateReleaseControllerInstances(jobs []*config.Job) []*config.JobInstance {
+	instances := []*config.JobInstance{}
+
+	// Group jobs by version
+	jobsByVersion := make(map[string][]*config.Job)
+	for _, job := range jobs {
+		jobsByVersion[job.Version] = append(jobsByVersion[job.Version], job)
+	}
+
+	// For each version, generate independent release events
+	for version, versionJobs := range jobsByVersion {
+		// Generate release event times for this version
+		releaseEvents := s.generateReleaseEvents()
+
+		// For each release event, create instances for ALL jobs in this version
+		for _, releaseTime := range releaseEvents {
+			for _, job := range versionJobs {
+				instances = append(instances, &config.JobInstance{
+					Job:       job,
+					StartTime: releaseTime,
+					EndTime:   releaseTime.Add(job.Duration),
+				})
+			}
+		}
+
+		// Optional: log the number of release events generated for this version
+		_ = version // Use version if needed for debugging
 	}
 
 	return instances
@@ -219,7 +254,7 @@ func (s *Simulator) simulateLeaseUsage(jobInstances []*config.JobInstance) {
 					waitingJobs = waitingJobs[1:]
 
 					waitingJob.LeaseAcquired = true
-					waitingJob.StartTime = currentTime
+					// waitingJob.StartTime = currentTime
 					waitingJob.EndTime = currentTime.Add(waitingJob.Job.Duration)
 					activeLeases++
 					remainingJobs = append(remainingJobs, waitingJob)
@@ -251,7 +286,7 @@ func (s *Simulator) simulateLeaseUsage(jobInstances []*config.JobInstance) {
 					Type:         EventTypeJobTimeout,
 					JobInstance:  job,
 					ActiveLeases: activeLeases,
-					Message:      fmt.Sprintf("Job '%s' timed out waiting for lease (waited %s)", job.Job.Name, job.LeaseWaitTime),
+					Message:      fmt.Sprintf("Job '%s' timed out waiting for lease (waited %s) - lease released", job.Job.Name, job.LeaseWaitTime),
 					IsWarning:    true,
 				})
 			} else {
@@ -261,10 +296,11 @@ func (s *Simulator) simulateLeaseUsage(jobInstances []*config.JobInstance) {
 		waitingJobs = remainingWaitingJobs
 
 		// Check for job execution timeouts
+		stillRunning := []*config.JobInstance{}
 		for _, job := range activeJobs {
 			if currentTime.Sub(job.StartTime) >= s.config.JobTimeoutDuration && !job.TimedOut {
 				job.TimedOut = true
-
+				activeLeases--
 				s.addEvent(Event{
 					Time:         currentTime,
 					Type:         EventTypeJobTimeout,
@@ -273,8 +309,11 @@ func (s *Simulator) simulateLeaseUsage(jobInstances []*config.JobInstance) {
 					Message:      fmt.Sprintf("Job '%s' exceeded execution timeout (%s)", job.Job.Name, s.config.JobTimeoutDuration),
 					IsWarning:    true,
 				})
+			} else {
+				stillRunning = append(stillRunning, job)
 			}
 		}
+		activeJobs = stillRunning
 
 		// Move to next time step (5 minute intervals)
 		currentTime = currentTime.Add(5 * time.Minute)
