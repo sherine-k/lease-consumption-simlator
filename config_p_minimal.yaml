@@ -120,7 +120,7 @@ jobs:
     payloadType: "multi"
     duration: 5h
     triggerType: "cron"
-    cronSchedule: "0 6 * * 1-4" 
+    cronSchedule: "0 6 * * 1-4"
 
   - name: "ocp-4.18-fips-ovn-remote-libvirt-multi-p-p"
     version: "4.18"
@@ -128,7 +128,7 @@ jobs:
     payloadType: "multi"
     duration: 5h
     triggerType: "cron"
-    cronSchedule: "0 7 * * 1-4" 
+    cronSchedule: "0 7 * * 1-4"
 
   - name: "ocp-4.18-e2e-serial-ovn-remote-libvirt-multi-p-p"
     version: "4.18"

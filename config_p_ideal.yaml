@@ -85,7 +85,7 @@ jobs:
     duration: 5h
     triggerType: "cron"
     cronSchedule: "0 3 * * 1-4" 
-    
+
   - name: "ocp-4.19-e2e-tech-preview-ovn-remote-libvirt-multi-p-p"
     version: "4.19"
     scenario: "ocp-e2e-tech-preview-ovn-remote-libvirt-multi-p-p"
