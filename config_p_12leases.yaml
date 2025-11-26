@@ -42,15 +42,15 @@ jobs:
     payloadType: "multi"
     duration: 5h
     triggerType: "cron"
-    cronSchedule: "0 0 * * 1-4"
+    cronSchedule: "0 0 * * 1-4" 
 
   - name: "ocp-4.19-fips-ovn-remote-libvirt-multi-p-p"
     version: "4.19"
     scenario: "ocp-fips-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
     duration: 5h
-    triggerType: "release-controller"
-    isReleaseController: true
+    triggerType: "cron"
+    cronSchedule: "0 1 * * 1-4"   
 
   - name: "ocp-4.19-e2e-serial-ovn-remote-libvirt-multi-p-p"
     version: "4.19"
@@ -58,7 +58,7 @@ jobs:
     payloadType: "multi"
     duration: 5h
     triggerType: "cron"
-    cronSchedule: "0 1 * * 1-4"
+    cronSchedule: "0 2 * * 1-4"
     
   - name: "ocp-4.19-e2e-ovn-agent-remote-libvirt-multi-p-p"
     version: "4.19"
@@ -66,8 +66,16 @@ jobs:
     payloadType: "multi"
     duration: 5h
     triggerType: "cron"
-    cronSchedule: "0 2 * * 1-4" 
+    cronSchedule: "0 3 * * 1-4" 
     
+  # - name: "ocp-4.19-e2e-tech-preview-remote-libvirt-multi-p-p"
+  #   version: "4.19"
+  #   scenario: "ocp-e2e-tech-preview-remote-libvirt-multi-p-p"
+  #   payloadType: "multi"
+  #   duration: 5h
+  #   triggerType: "cron"
+  #   cronSchedule: "0 4 * * 1-4" 
+
   # - name: "ocp-4.18-e2e-ovn-remote-libvirt-multi-p-p"
   #   version: "4.18"
   #   scenario: "ocp-e2e-ovn-remote-libvirt-multi-p-p"
@@ -90,7 +98,7 @@ jobs:
     payloadType: "multi"
     duration: 5h
     triggerType: "cron"
-    cronSchedule: "0 3 * * 1-4"     
+    cronSchedule: "0 5 * * 1-4"
 
   - name: "ocp-4.18-e2e-ovn-agent-remote-libvirt-multi-p-p"
     version: "4.18"
@@ -98,17 +106,15 @@ jobs:
     payloadType: "multi"
     duration: 5h
     triggerType: "cron"
-    cronSchedule: "0 4 * * 1-4" 
+    cronSchedule: "0 6 * * 1-4"
 
   - name: "ocp-4.18-fips-ovn-remote-libvirt-multi-p-p"
     version: "4.18"
     scenario: "ocp-fips-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
     duration: 5h
-    triggerType: "release-controller"
-    isReleaseController: true
-    # triggerType: "cron"
-    # cronSchedule: "0 5 * * 1-4" 
+    triggerType: "cron"
+    cronSchedule: "0 7 * * 1-4"
 
   - name: "ocp-4.18-e2e-serial-ovn-remote-libvirt-multi-p-p"
     version: "4.18"
@@ -116,7 +122,15 @@ jobs:
     payloadType: "multi"
     duration: 5h
     triggerType: "cron"
-    cronSchedule: "0 5 * * 1-4"
+    cronSchedule: "0 8 * * 1-4"
+  
+  # - name: "ocp-4.18-e2e-tech-preview-libvirt-multi-p-p"
+  #   version: "4.18"
+  #   scenario: "ocp-e2e-tech-preview-libvirt-multi-p-p"
+  #   payloadType: "multi"
+  #   duration: 5h
+  #   triggerType: "cron"
+  #   cronSchedule: "0 9 * * 1-4"
 
   # - name: "ocp-4.17-e2e-ovn-remote-libvirt-multi-p-p"
   #   version: "4.17"
@@ -140,7 +154,7 @@ jobs:
     payloadType: "multi"
     duration: 5h
     triggerType: "cron"
-    cronSchedule: "0 6 * * 1-4"
+    cronSchedule: "0 10 * * 1-4" 
     
   - name: "ocp-4.17-e2e-ovn-agent-remote-libvirt-multi-p-p"
     version: "4.17"
@@ -148,17 +162,15 @@ jobs:
     payloadType: "multi"
     duration: 5h
     triggerType: "cron"
-    cronSchedule: "0 7 * * 1-4" 
+    cronSchedule: "0 11 * * 1-4" 
 
   - name: "ocp-4.17-fips-ovn-remote-libvirt-multi-p-p"
     version: "4.17"
     scenario: "ocp-fips-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
     duration: 5h
-    triggerType: "release-controller"
-    isReleaseController: true
-    # triggerType: "cron"
-    # cronSchedule: "0 8 * * 1-4" 
+    triggerType: "cron"
+    cronSchedule: "0 12 * * 1-4" 
 
   - name: "ocp-4.17-e2e-serial-ovn-remote-libvirt-multi-p-p"
     version: "4.17"
@@ -166,7 +178,15 @@ jobs:
     payloadType: "multi"
     duration: 5h
     triggerType: "cron"
-    cronSchedule: "0 8 * * 1-4" 
+    cronSchedule: "0 13 * * 1-4" 
+
+  # - name: "ocp-4.17-e2e-tech-preview-libvirt-multi-p-p"
+  #   version: "4.17"
+  #   scenario: "ocp-e2e-tech-preview-libvirt-multi-p-p"
+  #   payloadType: "multi"
+  #   duration: 5h
+  #   triggerType: "cron"
+  #   cronSchedule: "0 14 * * 1-4"
 
   # - name: "ocp-4.16-e2e-ovn-remote-libvirt-multi-p-p"
   #   version: "4.16"
@@ -190,7 +210,7 @@ jobs:
     payloadType: "multi"
     duration: 5h
     triggerType: "cron"
-    cronSchedule: "0 9 * * 1-4"  
+    cronSchedule: "0 15 * * 1-4"    
 
   - name: "ocp-4.16-e2e-ovn-agent-remote-libvirt-multi-p-p"
     version: "4.16"
@@ -198,25 +218,31 @@ jobs:
     payloadType: "multi"
     duration: 5h
     triggerType: "cron"
-    cronSchedule: "0 10 * * 1-4" 
+    cronSchedule: "0 16 * * 1-4" 
 
   - name: "ocp-4.16-fips-ovn-remote-libvirt-multi-p-p"
     version: "4.16"
     scenario: "ocp-fips-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
     duration: 5h
-    triggerType: "release-controller"
-    isReleaseController: true    
-    # triggerType: "cron"
-    # cronSchedule: "0 11 * * 1-4" 
+    triggerType: "cron"
+    cronSchedule: "0 17 * * 1-4" 
 
   - name: "ocp-4.16-e2e-serial-ovn-remote-libvirt-multi-p-p"
     version: "4.16"
     scenario: "ocp-e2e-serial-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h 
+    duration: 5h
     triggerType: "cron"
-    cronSchedule: "0 11 * * 1-4" 
+    cronSchedule: "0 18 * * 1-4" 
+
+  # - name: "ocp-4.16-e2e-tech-preview-libvirt-multi-p-p"
+  #   version: "4.16"
+  #   scenario: "ocp-e2e-tech-preview-libvirt-multi-p-p"
+  #   payloadType: "multi"
+  #   duration: 5h
+  #   triggerType: "cron"
+  #   cronSchedule: "0 19 * * 1-4" 
 
   # - name: "ocp-4.15-e2e-ovn-remote-libvirt-multi-p-p"
   #   version: "4.15"
@@ -240,7 +266,7 @@ jobs:
     payloadType: "multi"
     duration: 5h
     triggerType: "cron"
-    cronSchedule: "0 12 * * 1-4"
+    cronSchedule: "0 20 * * 1-4" 
     
   - name: "ocp-4.15-e2e-ovn-agent-remote-libvirt-multi-p-p"
     version: "4.15"
@@ -248,17 +274,15 @@ jobs:
     payloadType: "multi"
     duration: 5h
     triggerType: "cron"
-    cronSchedule: "0 13 * * 1-4" 
+    cronSchedule: "0 21 * * 1-4" 
 
   - name: "ocp-4.15-fips-ovn-remote-libvirt-multi-p-p"
     version: "4.15"
     scenario: "ocp-fips-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
     duration: 5h
-    triggerType: "release-controller"
-    isReleaseController: true    
-    # triggerType: "cron"
-    # cronSchedule: "0 14 * * 1-4" 
+    triggerType: "cron"
+    cronSchedule: "0 22 * * 1-4" 
 
   - name: "ocp-4.15-e2e-serial-ovn-remote-libvirt-multi-p-p"
     version: "4.15"
@@ -266,7 +290,15 @@ jobs:
     payloadType: "multi"
     duration: 5h
     triggerType: "cron"
-    cronSchedule: "0 14 * * 1-4" 
+    cronSchedule: "0 23 * * 1-4" 
+
+  # - name: "ocp-4.15-e2e-tech-preview-libvirt-multi-p-p"
+  #   version: "4.15"
+  #   scenario: "ocp-e2e-tech-preview-libvirt-multi-p-p"
+  #   payloadType: "multi"
+  #   duration: 5h
+  #   triggerType: "cron"
+  #   cronSchedule: "30 0 * * 1-4"
 
 ### Dev ###
   # - name: "ocp-4.20-e2e-ovn-remote-libvirt-multi-p-p"
@@ -291,7 +323,7 @@ jobs:
     payloadType: "multi"
     duration: 5h
     triggerType: "cron"
-    cronSchedule: "0 15 * * 1-4"
+    cronSchedule: "0 4 * * 1-4"
 
   - name: "ocp-4.20-fips-ovn-remote-libvirt-multi-p-p"
     version: "4.20"
@@ -307,7 +339,7 @@ jobs:
     payloadType: "multi"
     duration: 5h
     triggerType: "cron"
-    cronSchedule: "0 16 * * 1-4"
+    cronSchedule: "0 9 * * 1-4"
 
   - name: "ocp-4.20-e2e-ovn-agent-remote-libvirt-multi-p-p"
     version: "4.20"
@@ -315,16 +347,8 @@ jobs:
     payloadType: "multi"
     duration: 5h
     triggerType: "cron"
-    cronSchedule: "0 17 * * 1-4"
+    cronSchedule: "0 14 * * 1-4"
 
-  # - name: "ocp-4.21-upgrade-tech-preview-ovn-remote-libvirt-multi-p-p"
-  #   version: "4.21"
-  #   scenario: "ocp-upgrade-tech-preview-ovn-remote-libvirt-multi-p-p"
-  #   payloadType: "multi"
-  #   duration: 5h
-  #   triggerType: "release-controller"
-  #   isReleaseController: true
-  
   - name: "ocp-4.21-tech-preview-ovn-remote-libvirt-multi-p-p"
     version: "4.21"
     scenario: "ocp-tech-preview-ovn-remote-libvirt-multi-p-p"
@@ -355,7 +379,7 @@ jobs:
     payloadType: "multi"
     duration: 5h
     triggerType: "cron"
-    cronSchedule: "0 18 * * 1-4"
+    cronSchedule: "0 19 * * 1-4"
 
   - name: "ocp-4.21-fips-ovn-remote-libvirt-multi-p-p"
     version: "4.21"
@@ -371,7 +395,7 @@ jobs:
     payloadType: "multi"
     duration: 5h15m
     triggerType: "cron"
-    cronSchedule: "0 19 * * 1-4"
+    cronSchedule: "30 0 * * 1-4"
 
   - name: "ocp-4.21-e2e-ovn-agent-remote-libvirt-multi-p-p"
     version: "4.21"
@@ -379,4 +403,4 @@ jobs:
     payloadType: "multi"
     duration: 5h
     triggerType: "cron"
-    cronSchedule: "0 20 * * 1-4"
+    cronSchedule: "30 6 * * 1-4"

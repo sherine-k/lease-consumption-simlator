@@ -296,7 +296,7 @@ jobs:
     payloadType: "multi"
     duration: 5h
     triggerType: "cron"
-    cronSchedule: "0 21 * * 1-4" 
+    cronSchedule: "0 22 * * 1-4" 
 
   - name: "ocp-4.15-e2e-serial-ovn-remote-libvirt-multi-p-p"
     version: "4.15"
@@ -304,7 +304,7 @@ jobs:
     payloadType: "multi"
     duration: 5h
     triggerType: "cron"
-    cronSchedule: "0 22 * * 1-4" 
+    cronSchedule: "0 23 * * 1-4" 
 
   - name: "ocp-4.15-e2e-tech-preview-libvirt-multi-p-p"
     version: "4.15"
@@ -312,7 +312,7 @@ jobs:
     payloadType: "multi"
     duration: 5h
     triggerType: "cron"
-    cronSchedule: "0 23 * * 1-4"
+    cronSchedule: "30 0 * * 1-4"
 
 ### Dev ###
   # - name: "ocp-4.20-e2e-ovn-remote-libvirt-multi-p-p"

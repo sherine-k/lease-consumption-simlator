@@ -14,7 +14,7 @@
 # CI Job Lease Simulator Configuration
 
 # Maximum number of concurrent active leases
-maxActiveLeases: 20
+maxActiveLeases: 9
 
 # Maximum time to wait for a job to complete before considering it timed out
 jobTimeoutDuration: 5h15m
@@ -68,7 +68,7 @@ jobs:
   payloadType: "multi"
   duration: 5h
   triggerType: "cron"
-  cronSchedule: "0 4 * * 1-4"
+  cronSchedule: "0 4 * * 6"
 
 - name: "ocp-4.19-e2e-ovn-remote-libvirt-multi-z-xz"
   version: "4.19"
@@ -100,7 +100,7 @@ jobs:
   payloadType: "multi"
   duration: 5h
   triggerType: "cron"
-  cronSchedule: "0 8 * * 1-4"
+  cronSchedule: "0 8 * * 6-7"
   
 - name: "ocp-4.18-e2e-ovn-agent-remote-libvirt-multi-z-z"
   version: "4.18"
@@ -116,7 +116,7 @@ jobs:
   payloadType: "multi"
   duration: 5h
   triggerType: "cron"
-  cronSchedule: "0 10 * * 1-4" 
+  cronSchedule: "0 10 * * 6-7" 
 
 - name: "ocp-4.18-e2e-tech-preview-ovn-remote-libvirt-multi-z-z"
   version: "4.18"
@@ -124,7 +124,7 @@ jobs:
   payloadType: "multi"
   duration: 5h
   triggerType: "cron"
-  cronSchedule: "0 10 * * 1-4"
+  cronSchedule: "0 10 * * 6"
 
 - name: "ocp-4.17-upgrade-ovn-remote-libvirt-multi-z-z"
   version: "4.17"
@@ -148,7 +148,7 @@ jobs:
   payloadType: "multi"
   duration: 5h
   triggerType: "cron"
-  cronSchedule: "0 13 * * 1-4" 
+  cronSchedule: "0 13 * * 6-7" 
   
 - name: "ocp-4.17-e2e-ovn-agent-remote-libvirt-multi-z-z"
   version: "4.17"
@@ -164,7 +164,7 @@ jobs:
   payloadType: "multi"
   duration: 5h
   triggerType: "cron"
-  cronSchedule: "0 15 * * 1-4" 
+  cronSchedule: "0 15 * * 6-7" 
 
 - name: "ocp-4.17-e2e-tech-preview-ovn-remote-libvirt-multi-z-z"
   version: "4.17"
@@ -172,7 +172,7 @@ jobs:
   payloadType: "multi"
   duration: 5h
   triggerType: "cron"
-  cronSchedule: "0 16 * * 1-4"
+  cronSchedule: "0 16 * * 6"
 
 - name: "ocp-4.16-upgrade-ovn-remote-libvirt-multi-z-z"
   version: "4.16"
@@ -196,7 +196,7 @@ jobs:
   payloadType: "multi"
   duration: 5h
   triggerType: "cron"
-  cronSchedule: "0 19 * * 1-4"
+  cronSchedule: "0 19 * * 6-7"
   
 - name: "ocp-4.16-e2e-ovn-agent-remote-libvirt-multi-z-z"
   version: "4.16"
@@ -212,7 +212,7 @@ jobs:
   payloadType: "multi"
   duration: 5h
   triggerType: "cron"
-  cronSchedule: "0 21 * * 1-4"
+  cronSchedule: "0 21 * * 6-7"
 
 - name: "ocp-4.16-e2e-tech-preview-ovn-remote-libvirt-multi-z-z"
   version: "4.16"
@@ -220,7 +220,7 @@ jobs:
   payloadType: "multi"
   duration: 5h
   triggerType: "cron"
-  cronSchedule: "0 22 * * 1-4"
+  cronSchedule: "0 22 * * 6"
 
 - name: "ocp-4.15-upgrade-ovn-remote-libvirt-multi-z-z"
   version: "4.15"
@@ -244,7 +244,7 @@ jobs:
   payloadType: "multi"
   duration: 5h
   triggerType: "cron"
-  cronSchedule: "30 3 * * 1-4"
+  cronSchedule: "30 3 * * 6-7"
   
 - name: "ocp-4.15-e2e-ovn-agent-remote-libvirt-multi-z-z"
   version: "4.15"
@@ -260,7 +260,7 @@ jobs:
   payloadType: "multi"
   duration: 5h
   triggerType: "cron"
-  cronSchedule: "30 8 * * 1-4" 
+  cronSchedule: "30 8 * * 6-7" 
 
 - name: "ocp-4.15-e2e-tech-preview-ovn-remote-libvirt-multi-z-z"
   version: "4.15"
@@ -268,7 +268,7 @@ jobs:
   payloadType: "multi"
   duration: 5h
   triggerType: "cron"
-  cronSchedule: "30 11 * * 1-4"
+  cronSchedule: "30 11 * * 6"
 
 ### Dev ###
 - name: "ocp-4.20-upgrade-ovn-remote-libvirt-multi-z-z"
@@ -276,8 +276,8 @@ jobs:
   scenario: "ocp-upgrade-ovn-remote-libvirt-multi-z-z"
   payloadType: "multi"
   duration: 5h
-  triggerType: "release-controller"
-  isReleaseController: true
+  triggerType: "cron"
+  cronSchedule: "30 15 * * 1-4"
 
 - name: "ocp-4.20-fips-ovn-remote-libvirt-multi-z-z"
   version: "4.20"
@@ -292,8 +292,8 @@ jobs:
   scenario: "ocp-e2e-serial-ovn-remote-libvirt-multi-z-z"
   payloadType: "multi"
   duration: 5h
-  triggerType: "release-controller"
-  isReleaseController: true
+  triggerType: "cron"
+  cronSchedule: "30 18 * * 1-4"
 
 - name: "ocp-4.20-e2e-ovn-agent-remote-libvirt-multi-z-z"
   version: "4.20"
@@ -301,7 +301,7 @@ jobs:
   payloadType: "multi"
   duration: 5h
   triggerType: "cron"
-  cronSchedule: "30 14 * * 1-4" 
+  cronSchedule: "30 21 * * 1-4" 
 
 - name: "ocp-4.20-e2e-ovn-remote-libvirt-multi-z-xz"
   version: "4.20"
@@ -309,31 +309,31 @@ jobs:
   payloadType: "multi"
   duration: 5h
   triggerType: "cron"
-  cronSchedule: "30 17 * * 1-4" 
+  cronSchedule: "30 22 * * 1-4" 
 
 - name: "ocp-4.20-e2e-tech-preview-ovn-remote-libvirt-multi-z-z"
   version: "4.20"
   scenario: "ocp-e2e-tech-preview-ovn-remote-libvirt-multi-z-z"
   payloadType: "multi"
   duration: 5h
-  triggerType: "release-controller"
-  isReleaseController: true
+  triggerType: "cron"
+  cronSchedule: "30 1 * * 1-4"
 
 - name: "ocp-4.21-tech-preview-ovn-remote-libvirt-multi-z-z"
   version: "4.21"
   scenario: "ocp-tech-preview-ovn-remote-libvirt-multi-z-z"
   payloadType: "multi"
   duration: 5h
-  triggerType: "release-controller"
-  isReleaseController: true
+  triggerType: "cron"
+  cronSchedule: "30 6 * * 1-4"
 
 - name: "ocp-4.21-upgrade-ovn-remote-libvirt-multi-z-z"
   version: "4.21"
   scenario: "ocp-upgrade-ovn-remote-libvirt-multi-z-z"
   payloadType: "multi"
   duration: 5h
-  triggerType: "release-controller"
-  isReleaseController: true
+  triggerType: "cron"
+  cronSchedule: "30 12 * * 1-4"
 
 - name: "ocp-4.21-fips-ovn-remote-libvirt-multi-z-z"
   version: "4.21"
@@ -348,8 +348,8 @@ jobs:
   scenario: "ocp-e2e-serial-ovn-remote-libvirt-multi-z-z"
   payloadType: "multi"
   duration: 5h
-  triggerType: "release-controller"
-  isReleaseController: true
+  triggerType: "cron"
+  cronSchedule: "30 13 * * 1-4"
 
 - name: "ocp-4.21-e2e-ovn-agent-remote-libvirt-multi-z-z"
   version: "4.21"
