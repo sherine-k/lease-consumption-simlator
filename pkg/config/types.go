@@ -15,12 +15,14 @@ type Config struct {
 
 // Job represents a single CI job
 type Job struct {
-	Name        string        `yaml:"name"`
-	Version     string        `yaml:"version"`
-	Scenario    string        `yaml:"scenario"`
-	PayloadType string        `yaml:"payloadType"`
-	Duration    time.Duration `yaml:"duration"`
-	TriggerType TriggerType   `yaml:"triggerType"`
+	Name         string        `yaml:"name"`
+	Version      string        `yaml:"version"`
+	Scenario     string        `yaml:"scenario"`
+	PayloadType  string        `yaml:"payloadType"`
+	MeanDuration time.Duration `yaml:"meanDuration"`
+	StdDev       time.Duration `yaml:"stdDev"`
+	Duration     time.Duration `yaml:"-"` // Calculated from Gaussian distribution
+	TriggerType  TriggerType   `yaml:"triggerType"`
 
 	// For cron-based jobs
 	CronSchedule string `yaml:"cronSchedule,omitempty"`

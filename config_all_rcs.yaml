@@ -23,7 +23,8 @@ jobs:
     version: "4.19"
     scenario: "ocp-e2e-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true 
   
@@ -31,7 +32,8 @@ jobs:
   #   version: "4.19"
   #   scenario: "ocp-heavy-build-ovn-remote-libvirt-multi-p-p"
   #   payloadType: "multi"
-  #   duration: 5h
+  #   meanDuration: 3h
+  #   stdDev: 1h
   #   triggerType: "release-controller"
   #   isReleaseController: true   
   
@@ -39,7 +41,8 @@ jobs:
     version: "4.19"
     scenario: "ocp-upgrade-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true 
 
@@ -47,7 +50,8 @@ jobs:
     version: "4.19"
     scenario: "ocp-fips-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true   
 
@@ -55,7 +59,8 @@ jobs:
     version: "4.19"
     scenario: "ocp-e2e-serial-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true
     
@@ -63,7 +68,8 @@ jobs:
     version: "4.19"
     scenario: "ocp-e2e-ovn-agent-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true 
     
@@ -71,7 +77,8 @@ jobs:
     version: "4.18"
     scenario: "ocp-e2e-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true
 
@@ -79,7 +86,8 @@ jobs:
   #   version: "4.18"
   #   scenario: "ocp-heavy-build-ovn-remote-libvirt-multi-p-p"
   #   payloadType: "multi"
-  #   duration: 5h
+  #   meanDuration: 3h
+  #   stdDev: 1h
   #   triggerType: "release-controller"
   #   isReleaseController: true 
 
@@ -87,7 +95,8 @@ jobs:
     version: "4.18"
     scenario: "ocp-upgrade-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true     
 
@@ -95,7 +104,8 @@ jobs:
     version: "4.18"
     scenario: "ocp-e2e-ovn-agent-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true 
 
@@ -103,7 +113,8 @@ jobs:
     version: "4.18"
     scenario: "ocp-fips-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true 
 
@@ -111,7 +122,8 @@ jobs:
     version: "4.18"
     scenario: "ocp-e2e-serial-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true
 
@@ -119,7 +131,8 @@ jobs:
     version: "4.17"
     scenario: "ocp-e2e-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true
 
@@ -127,7 +140,8 @@ jobs:
   #   version: "4.17"
   #   scenario: "ocp-heavy-build-ovn-remote-libvirt-multi-p-p"
   #   payloadType: "multi"
-  #   duration: 5h
+  #   meanDuration: 3h
+  #   stdDev: 1h
   #   triggerType: "release-controller"
   #   isReleaseController: true 
   
@@ -135,7 +149,8 @@ jobs:
     version: "4.17"
     scenario: "ocp-upgrade-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true
     
@@ -143,7 +158,8 @@ jobs:
     version: "4.17"
     scenario: "ocp-e2e-ovn-agent-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true 
 
@@ -151,7 +167,8 @@ jobs:
     version: "4.17"
     scenario: "ocp-fips-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true 
 
@@ -159,7 +176,8 @@ jobs:
     version: "4.17"
     scenario: "ocp-e2e-serial-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true 
 
@@ -167,7 +185,8 @@ jobs:
     version: "4.16"
     scenario: "ocp-e2e-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true
 
@@ -175,7 +194,8 @@ jobs:
   #   version: "4.16"
   #   scenario: "ocp-heavy-build-ovn-remote-libvirt-multi-p-p"
   #   payloadType: "multi"
-  #   duration: 5h
+  #   meanDuration: 3h
+  #   stdDev: 1h
   #   triggerType: "release-controller"
   #   isReleaseController: true 
   
@@ -183,7 +203,8 @@ jobs:
     version: "4.16"
     scenario: "ocp-upgrade-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true    
 
@@ -191,7 +212,8 @@ jobs:
     version: "4.16"
     scenario: "ocp-e2e-ovn-agent-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true 
 
@@ -199,7 +221,8 @@ jobs:
     version: "4.16"
     scenario: "ocp-fips-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true 
 
@@ -207,7 +230,8 @@ jobs:
     version: "4.16"
     scenario: "ocp-e2e-serial-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true 
 
@@ -215,7 +239,8 @@ jobs:
     version: "4.15"
     scenario: "ocp-e2e-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true
 
@@ -223,7 +248,8 @@ jobs:
   #   version: "4.15"
   #   scenario: "ocp-heavy-build-ovn-remote-libvirt-multi-p-p"
   #   payloadType: "multi"
-  #   duration: 5h
+  #   meanDuration: 3h
+  #   stdDev: 1h
   #   triggerType: "release-controller"
   #   isReleaseController: true 
   
@@ -231,7 +257,8 @@ jobs:
     version: "4.15"
     scenario: "ocp-upgrade-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true
     
@@ -239,7 +266,8 @@ jobs:
     version: "4.15"
     scenario: "ocp-e2e-ovn-agent-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true 
 
@@ -247,7 +275,8 @@ jobs:
     version: "4.15"
     scenario: "ocp-fips-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true 
 
@@ -255,7 +284,8 @@ jobs:
     version: "4.15"
     scenario: "ocp-e2e-serial-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true 
 
@@ -264,7 +294,8 @@ jobs:
     version: "4.20"
     scenario: "ocp-e2e-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true
 
@@ -272,7 +303,8 @@ jobs:
   #   version: "4.20"
   #   scenario: "ocp-heavy-build-ovn-remote-libvirt-multi-p-p"
   #   payloadType: "multi"
-  #   duration: 5h
+  #   meanDuration: 3h
+  #   stdDev: 1h
   #   triggerType: "release-controller"
   #   isReleaseController: true
 
@@ -280,7 +312,8 @@ jobs:
     version: "4.20"
     scenario: "ocp-upgrade-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true
 
@@ -288,7 +321,8 @@ jobs:
     version: "4.20"
     scenario: "ocp-fips-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true
 
@@ -296,7 +330,8 @@ jobs:
     version: "4.20"
     scenario: "ocp-e2e-serial-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true
 
@@ -304,7 +339,8 @@ jobs:
     version: "4.20"
     scenario: "ocp-e2e-ovn-agent-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true
 
@@ -312,7 +348,8 @@ jobs:
     version: "4.21"
     scenario: "ocp-upgrade-tech-preview-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true
   
@@ -320,7 +357,8 @@ jobs:
     version: "4.21"
     scenario: "ocp-tech-preview-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true
 
@@ -328,7 +366,8 @@ jobs:
     version: "4.21"
     scenario: "ocp-e2e-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true
 
@@ -336,7 +375,8 @@ jobs:
   #   version: "4.21"
   #   scenario: "ocp-heavy-build-ovn-remote-libvirt-multi-p-p"
   #   payloadType: "multi"
-  #   duration: 5h
+  #   meanDuration: 3h
+  #   stdDev: 1h
   #   triggerType: "release-controller"
   #   isReleaseController: true 
 
@@ -344,7 +384,8 @@ jobs:
     version: "4.21"
     scenario: "ocp-upgrade-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true
 
@@ -352,7 +393,8 @@ jobs:
     version: "4.21"
     scenario: "ocp-fips-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true
 
@@ -360,7 +402,8 @@ jobs:
     version: "4.21"
     scenario: "ocp-e2e-serial-ovn-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true
 
@@ -368,6 +411,7 @@ jobs:
     version: "4.21"
     scenario: "ocp-e2e-ovn-agent-remote-libvirt-multi-p-p"
     payloadType: "multi"
-    duration: 5h
+    meanDuration: 3h
+    stdDev: 1h
     triggerType: "release-controller"
     isReleaseController: true

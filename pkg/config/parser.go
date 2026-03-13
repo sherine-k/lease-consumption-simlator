@@ -2,7 +2,9 @@ package config
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -17,6 +19,22 @@ func LoadConfig(filename string) (*Config, error) {
 	var config Config
 	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
+	}
+
+	// Calculate job durations from Gaussian distribution
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for i := range config.Jobs {
+		job := &config.Jobs[i]
+		// Generate duration from normal distribution: mean + stddev * N(0,1)
+		gaussianValue := rng.NormFloat64()
+		durationSeconds := job.MeanDuration.Seconds() + (job.StdDev.Seconds() * gaussianValue)
+
+		// Ensure duration is positive
+		if durationSeconds < 0 {
+			durationSeconds = job.MeanDuration.Seconds() * 0.1 // Use 10% of mean as minimum
+		}
+
+		job.Duration = time.Duration(durationSeconds * float64(time.Second))
 	}
 
 	// Validate configuration
@@ -54,8 +72,12 @@ func validateConfig(config *Config) error {
 			return fmt.Errorf("job %d: name is required", i)
 		}
 
-		if job.Duration <= 0 {
-			return fmt.Errorf("job %s: duration must be greater than 0", job.Name)
+		if job.MeanDuration <= 0 {
+			return fmt.Errorf("job %s: meanDuration must be greater than 0", job.Name)
+		}
+
+		if job.StdDev < 0 {
+			return fmt.Errorf("job %s: stdDev must be greater than or equal to 0", job.Name)
 		}
 
 		if job.TriggerType != TriggerTypeCron && job.TriggerType != TriggerTypeReleaseController {
