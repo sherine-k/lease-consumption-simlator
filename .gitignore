@@ -27,3 +27,6 @@ leases
 # OS specific files
 .DS_Store
 Thumbs.db
+
+# simulation extras
+simulation-report.txt

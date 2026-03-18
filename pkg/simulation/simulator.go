@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/robfig/cron/v3"
@@ -71,21 +72,35 @@ func (s *Simulator) generateJobInstances() []*config.JobInstance {
 	for i := range s.config.Jobs {
 		job := &s.config.Jobs[i]
 
-		switch job.TriggerType {
-		case config.TriggerTypeCron:
-			// Parse cron schedule and generate instances
+		// For new template format: jobs with OnReleaseController=true trigger on both cron and releases
+		// For old format: jobs are either cron OR release-controller
+		if job.OnReleaseController {
+			// Template format: generate both cron and release instances
 			cronInstances := s.generateCronInstances(job)
 			instances = append(instances, cronInstances...)
-		case config.TriggerTypeReleaseController:
-			// Collect all release controller jobs to process together
 			releaseControllerJobs = append(releaseControllerJobs, job)
+		} else {
+			// Old format or template jobs without release controller
+			switch job.TriggerType {
+			case config.TriggerTypeCron:
+				cronInstances := s.generateCronInstances(job)
+				instances = append(instances, cronInstances...)
+			case config.TriggerTypeReleaseController:
+				releaseControllerJobs = append(releaseControllerJobs, job)
+			}
 		}
 	}
 
-	// Generate instances for all release controller jobs at the same release events
+	// Generate instances for all release controller jobs
 	if len(releaseControllerJobs) > 0 {
 		rcInstances := s.generateReleaseControllerInstances(releaseControllerJobs)
 		instances = append(instances, rcInstances...)
+	}
+
+	// Generate developer session instances
+	if s.config.DevLeaseBuffer > 0 {
+		devSessions := s.generateDeveloperSessions()
+		instances = append(instances, devSessions...)
 	}
 
 	return instances
@@ -122,18 +137,41 @@ func (s *Simulator) generateCronInstances(job *config.Job) []*config.JobInstance
 }
 
 // generateReleaseEvents generates release trigger times for a specific version
-func (s *Simulator) generateReleaseEvents() []time.Time {
+// Frequency depends on version category:
+// - Dev: 4-8 hours
+// - Supported: 4-24 hours
+// - EUS: 4 hours - 5 days
+func (s *Simulator) generateReleaseEvents(category config.VersionCategory) []time.Time {
 	releaseEvents := []time.Time{}
 
-	// Generate release events at somewhat random intervals
-	// Average of one release every 6 hours
-	currentTime := s.simulationStart
+	// Determine frequency range based on version category
+	var minHours, maxHours int
+	switch category {
+	case config.VersionCategoryDev:
+		minHours = 4
+		maxHours = 8
+	case config.VersionCategorySupported:
+		minHours = 4
+		maxHours = 24
+	case config.VersionCategoryEus:
+		minHours = 4
+		maxHours = 120 // 5 days
+	default:
+		// Fallback to dev timings
+		minHours = 4
+		maxHours = 8
+	}
+
+	// Start at a random offset from 0 to maxHours
+	initialOffsetHours := rand.Intn(maxHours + 1)
+	currentTime := s.simulationStart.Add(time.Duration(initialOffsetHours) * time.Hour)
 
 	for currentTime.Before(s.simulationEnd) {
 		releaseEvents = append(releaseEvents, currentTime)
 
-		// Next release in 4-8 hours (random interval, averaging ~6 hours)
-		currentTime = currentTime.Add(4*time.Hour + time.Duration(rand.Intn(5))*time.Hour)
+		// Random interval within the range
+		intervalHours := minHours + rand.Intn(maxHours-minHours+1)
+		currentTime = currentTime.Add(time.Duration(intervalHours) * time.Hour)
 	}
 
 	return releaseEvents
@@ -145,19 +183,30 @@ func (s *Simulator) generateReleaseControllerInstances(jobs []*config.Job) []*co
 	instances := []*config.JobInstance{}
 
 	// Group jobs by version
-	jobsByVersion := make(map[string][]*config.Job)
+	type versionInfo struct {
+		jobs     []*config.Job
+		category config.VersionCategory
+	}
+	jobsByVersion := make(map[string]*versionInfo)
+
 	for _, job := range jobs {
-		jobsByVersion[job.Version] = append(jobsByVersion[job.Version], job)
+		if jobsByVersion[job.Version] == nil {
+			jobsByVersion[job.Version] = &versionInfo{
+				jobs:     []*config.Job{},
+				category: job.VersionCategory,
+			}
+		}
+		jobsByVersion[job.Version].jobs = append(jobsByVersion[job.Version].jobs, job)
 	}
 
-	// For each version, generate independent release events
-	for version, versionJobs := range jobsByVersion {
-		// Generate release event times for this version
-		releaseEvents := s.generateReleaseEvents()
+	// For each version, generate independent release events based on its category
+	for _, info := range jobsByVersion {
+		// Generate release event times for this version using its category
+		releaseEvents := s.generateReleaseEvents(info.category)
 
 		// For each release event, create instances for ALL jobs in this version
 		for _, releaseTime := range releaseEvents {
-			for _, job := range versionJobs {
+			for _, job := range info.jobs {
 				instances = append(instances, &config.JobInstance{
 					Job:       job,
 					StartTime: releaseTime,
@@ -165,9 +214,67 @@ func (s *Simulator) generateReleaseControllerInstances(jobs []*config.Job) []*co
 				})
 			}
 		}
+	}
 
-		// Optional: log the number of release events generated for this version
-		_ = version // Use version if needed for debugging
+	return instances
+}
+
+// generateDeveloperSessions generates synthetic developer testing session instances
+// These represent ad-hoc developer usage of leases for testing
+func (s *Simulator) generateDeveloperSessions() []*config.JobInstance {
+	instances := []*config.JobInstance{}
+
+	if s.config.DevLeaseBuffer == 0 {
+		return instances
+	}
+
+	// Calculate how many sessions to generate
+	// Target: 40% average utilization of devLeaseBuffer
+	targetUtilization := 0.4
+	targetConcurrentSessions := float64(s.config.DevLeaseBuffer) * targetUtilization
+
+	// Average session duration from mean
+	avgSessionDuration := s.config.MeanDuration
+
+	// Total dev-hours needed across simulation
+	simulationHours := s.config.SimulationDuration.Hours()
+	totalDevHours := simulationHours * targetConcurrentSessions
+
+	// Number of sessions to generate
+	numSessions := int(totalDevHours / avgSessionDuration.Hours())
+
+	// Create a synthetic "developer" job for duration calculation
+	devJob := &config.Job{
+		Name:         "developer-session",
+		Version:      "dev",
+		Scenario:     "developer-testing",
+		PayloadType:  "dev",
+		MeanDuration: s.config.MeanDuration,
+		StdDev:       s.config.JobDurationStandardDeviation,
+		TriggerType:  config.TriggerTypeCron, // Doesn't matter, won't be used
+	}
+
+	// Create RNG for generating random values
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	// Generate random session start times across simulation period
+	for i := 0; i < numSessions; i++ {
+		// Random start time within simulation period
+		randomOffsetSeconds := rng.Int63n(int64(s.config.SimulationDuration.Seconds()))
+		startTime := s.simulationStart.Add(time.Duration(randomOffsetSeconds) * time.Second)
+
+		// Calculate duration using Gaussian distribution
+		duration := config.CalculateGaussianDuration(rng, s.config.MeanDuration, s.config.JobDurationStandardDeviation)
+		endTime := startTime.Add(duration)
+
+		// Only include if it starts before simulation end
+		if startTime.Before(s.simulationEnd) {
+			instances = append(instances, &config.JobInstance{
+				Job:       devJob,
+				StartTime: startTime,
+				EndTime:   endTime,
+			})
+		}
 	}
 
 	return instances
@@ -254,8 +361,7 @@ func (s *Simulator) simulateLeaseUsage(jobInstances []*config.JobInstance) {
 					waitingJobs = waitingJobs[1:]
 
 					waitingJob.LeaseAcquired = true
-					// waitingJob.StartTime = currentTime
-					waitingJob.EndTime = currentTime.Add(waitingJob.Job.Duration)
+								waitingJob.EndTime = currentTime.Add(waitingJob.Job.Duration)
 					activeLeases++
 					remainingJobs = append(remainingJobs, waitingJob)
 
@@ -345,7 +451,8 @@ func (s *Simulator) generateTimePoints() {
 
 			if event.Type == EventTypeJobWaiting {
 				waitingJobs++
-			} else if event.Type == EventTypeLeaseAcquired {
+			} else if event.Type == EventTypeLeaseAcquired && strings.Contains(event.Message, "after waiting") {
+			// Only decrement for jobs that were actually waiting
 				if waitingJobs > 0 {
 					waitingJobs--
 				}

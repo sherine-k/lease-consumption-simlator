@@ -310,14 +310,3 @@ func (g *Generator) GenerateDetailedTimeline(events []simulation.Event, limit in
 
 	return sb.String()
 }
-
-// FormatDuration formats a duration in a human-readable way
-func FormatDuration(d time.Duration) string {
-	if d < time.Minute {
-		return fmt.Sprintf("%ds", int(d.Seconds()))
-	}
-	if d < time.Hour {
-		return fmt.Sprintf("%dm", int(d.Minutes()))
-	}
-	return fmt.Sprintf("%dh%dm", int(d.Hours()), int(d.Minutes())%60)
-}

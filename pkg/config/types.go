@@ -10,19 +10,28 @@ type Config struct {
 	JobTimeoutDuration   time.Duration `yaml:"jobTimeoutDuration"`
 	LeaseWaitTimeout     time.Duration `yaml:"leaseWaitTimeout"`
 	SimulationDuration   time.Duration `yaml:"simulationDuration"`
+
+	// Template-based job configuration (new format)
+	DevVersions                    int           `yaml:"devVersions,omitempty"`
+	SupportedVersions              int           `yaml:"supportedVersions,omitempty"`
+	EusVersions                    int           `yaml:"eusVersions,omitempty"`
+	DevLeaseBuffer                 int           `yaml:"devLeaseBuffer,omitempty"`
+	MeanDuration                   time.Duration `yaml:"meanDuration,omitempty"`
+	JobDurationStandardDeviation   time.Duration `yaml:"jobDurationStandardDeviation,omitempty"`
+
 	Jobs                 []Job         `yaml:"jobs"`
 }
 
 // Job represents a single CI job
 type Job struct {
 	Name         string        `yaml:"name"`
-	Version      string        `yaml:"version"`
-	Scenario     string        `yaml:"scenario"`
-	PayloadType  string        `yaml:"payloadType"`
-	MeanDuration time.Duration `yaml:"meanDuration"`
-	StdDev       time.Duration `yaml:"stdDev"`
+	Version      string        `yaml:"version,omitempty"`
+	Scenario     string        `yaml:"scenario,omitempty"`
+	PayloadType  string        `yaml:"payloadType,omitempty"`
+	MeanDuration time.Duration `yaml:"meanDuration,omitempty"`
+	StdDev       time.Duration `yaml:"stdDev,omitempty"`
 	Duration     time.Duration `yaml:"-"` // Calculated from Gaussian distribution
-	TriggerType  TriggerType   `yaml:"triggerType"`
+	TriggerType  TriggerType   `yaml:"triggerType,omitempty"`
 
 	// For cron-based jobs
 	CronSchedule string `yaml:"cronSchedule,omitempty"`
@@ -30,6 +39,10 @@ type Job struct {
 	// For release controller jobs
 	// These are considered as "always reserved" leases
 	IsReleaseController bool `yaml:"isReleaseController,omitempty"`
+
+	// Template-based configuration (new format)
+	OnReleaseController bool            `yaml:"onReleaseController,omitempty"`
+	VersionCategory     VersionCategory `yaml:"-"` // Set during job expansion (dev/supported/eus)
 }
 
 // TriggerType defines how a job is triggered
@@ -38,6 +51,15 @@ type TriggerType string
 const (
 	TriggerTypeCron              TriggerType = "cron"
 	TriggerTypeReleaseController TriggerType = "release-controller"
+)
+
+// VersionCategory defines the category of an OpenShift version
+type VersionCategory string
+
+const (
+	VersionCategoryDev       VersionCategory = "dev"
+	VersionCategorySupported VersionCategory = "supported"
+	VersionCategoryEus       VersionCategory = "eus"
 )
 
 // JobInstance represents a specific execution of a job

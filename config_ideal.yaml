@@ -1,0 +1,55 @@
+# CI Job Lease Simulator Configuration
+
+# Maximum number of concurrent active leases
+maxActiveLeases: 50
+
+# Maximum time to wait for a job to complete before considering it timed out
+jobTimeoutDuration: 5h15m
+
+# Maximum time a job can wait for a lease before timing out
+leaseWaitTimeout: 5h
+
+# Duration of the simulation
+simulationDuration: 168h
+
+# Number of openshift development releases
+devVersions: 1
+
+# Number of actively supported openshift versions
+supportedVersions: 5
+
+# Number of EUS releases
+eusVersions: 5
+
+# Number of leases as a "buffer" for developer testing
+devLeaseBuffer: 5
+
+# Job duration variables
+meanDuration: 3h
+jobDurationStdDev: 1h
+
+# CI jobs for each version of openshift, and whether or not they are configured to run on the release controller
+jobs:
+  - name: e2e-conformance-parallel-single
+    onReleaseController: true
+  - name: e2e-conformance-parallel-multi
+    onReleaseController: false
+  - name: e2e-conformance-serial
+    onReleaseController: true
+  - name: e2e-fips
+    onReleaseController: true
+  - name: e2e-upgrade
+    onReleaseController: true
+  - name: e2e-tech-preview-parallel
+    onReleaseController: true
+  - name: e2e-tech-preview-serial
+    onReleaseController: false
+  - name: e2e-image-ecosystem
+    onReleaseController: false
+  - name: e2e-jenkins
+    onReleaseController: false
+  - name: e2e-compact
+    onReleaseController: false
+  - name: e2e-agent
+    onReleaseController: false
+
