@@ -171,11 +171,19 @@ func expandJobTemplate(template Job, versionType string, versionNum int, cronHou
 	job.CronSchedule = fmt.Sprintf("%d %d * * *", cronMinute, cronHour)
 	job.TriggerType = TriggerTypeCron
 
-	// If job should also trigger on release controller
-	if template.OnReleaseController {
+	// Check if job should also trigger on release controller for this category
+	shouldTriggerOnRC := false
+	for _, rcCategory := range template.OnReleaseController {
+		if rcCategory == category {
+			shouldTriggerOnRC = true
+			break
+		}
+	}
+
+	if shouldTriggerOnRC {
 		job.TriggerType = TriggerTypeReleaseController
 		job.IsReleaseController = true
-		job.OnReleaseController = true
+		job.OnReleaseController = template.OnReleaseController
 	}
 
 	return job

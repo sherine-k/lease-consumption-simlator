@@ -34,6 +34,9 @@ func (g *Generator) GenerateLeaseChart(timePoints []simulation.TimePoint, events
 	}
 
 	var sb strings.Builder
+	// Pre-allocate buffer to reduce allocations (rough estimate: 100 chars per row * totalRows)
+	estimatedSize := (maxLeases + 10) * 100
+	sb.Grow(estimatedSize)
 
 	// Header
 	sb.WriteString("\n")
@@ -45,42 +48,66 @@ func (g *Generator) GenerateLeaseChart(timePoints []simulation.TimePoint, events
 	type EnhancedTimePoint struct {
 		ActiveLeases  int
 		WaitingJobs   int
-		TimeoutJobs   int
+		HasTimeout    bool
 	}
 
 	enhancedPoints := make([]EnhancedTimePoint, len(timePoints))
 
 	for i, tp := range timePoints {
-		timeoutCount := 0
+		hasTimeout := false
 
-		// Count timeout events at this specific time point
+		// Check for timeout events within the window of this time point
+		// Look ahead to next time point (or end of simulation)
+		windowEnd := tp.Time.Add(15 * time.Minute)
+		if i+1 < len(timePoints) {
+			windowEnd = timePoints[i+1].Time
+		}
+
 		for _, event := range events {
-			if event.Time.Equal(tp.Time) && event.Type == simulation.EventTypeJobTimeout {
-				timeoutCount++
+			if event.Type == simulation.EventTypeJobTimeout &&
+				(event.Time.Equal(tp.Time) || (event.Time.After(tp.Time) && event.Time.Before(windowEnd))) {
+				hasTimeout = true
+				break
 			}
 		}
 
 		enhancedPoints[i] = EnhancedTimePoint{
 			ActiveLeases: tp.ActiveLeases,
 			WaitingJobs:  tp.WaitingJobs,
-			TimeoutJobs:  timeoutCount,
+			HasTimeout:   hasTimeout,
 		}
 	}
 
-	// Find max waiting/timeout jobs to determine chart height
-	maxWaitingAndTimeout := 0
-	for _, ep := range enhancedPoints {
-		total := ep.WaitingJobs + ep.TimeoutJobs
-		if total > maxWaitingAndTimeout {
-			maxWaitingAndTimeout = total
+	// Find max waiting jobs to determine chart height
+	// Check what will actually be visible when plotted at chart width
+	maxWaiting := 0
+	hasAnyWaiting := false
+
+	for x := 0; x < len(timePoints) && x < g.width-6; x++ {
+		pointIndex := int(float64(x) / float64(g.width-6) * float64(len(timePoints)-1))
+		if pointIndex >= len(enhancedPoints) {
+			pointIndex = len(enhancedPoints) - 1
+		}
+
+		ep := enhancedPoints[pointIndex]
+		if ep.WaitingJobs > maxWaiting {
+			maxWaiting = ep.WaitingJobs
+		}
+		if ep.WaitingJobs > 0 {
+			hasAnyWaiting = true
 		}
 	}
 
-	totalRows := maxLeases + maxWaitingAndTimeout
+	// Only include waiting rows if there are actually waiting jobs visible
+	totalRows := maxLeases
+	if hasAnyWaiting {
+		totalRows = maxLeases + maxWaiting
+	}
 
 	// Build the chart from top to bottom
-	// First draw waiting/timeout rows (if any)
-	for row := totalRows; row > maxLeases; row-- {
+	// Only draw waiting rows if there are actually waiting jobs to show
+	if hasAnyWaiting {
+		for row := totalRows; row > maxLeases; row-- {
 		// Y-axis label
 		sb.WriteString(fmt.Sprintf("%3d |", row))
 
@@ -94,21 +121,17 @@ func (g *Generator) GenerateLeaseChart(timePoints []simulation.TimePoint, events
 			ep := enhancedPoints[pointIndex]
 			waitingRow := row - maxLeases
 
-			if waitingRow <= ep.TimeoutJobs {
-				// Show timeout
-				sb.WriteString("!")
-			} else if waitingRow <= ep.TimeoutJobs+ep.WaitingJobs {
+			if waitingRow <= ep.WaitingJobs {
 				// Show waiting
-				sb.WriteString("*")
+				sb.WriteString("W")
 			} else {
 				sb.WriteString(" ")
 			}
+			}
+			sb.WriteString("\n")
 		}
-		sb.WriteString("\n")
-	}
 
-	// Separator line between waiting/timeout and lease slots
-	if maxWaitingAndTimeout > 0 {
+		// Separator line between waiting and lease slots
 		sb.WriteString("    ")
 		sb.WriteString(strings.Repeat("-", g.width-4))
 		sb.WriteString("\n")
@@ -197,10 +220,9 @@ func (g *Generator) GenerateLeaseChart(timePoints []simulation.TimePoint, events
 	sb.WriteString(fmt.Sprintf("  Lease slots (1-%d):\n", maxLeases))
 	sb.WriteString("    █ - Active lease\n")
 	sb.WriteString("    (space) - Free lease\n")
-	if maxWaitingAndTimeout > 0 {
-		sb.WriteString(fmt.Sprintf("  Waiting/Timeout rows (>%d):\n", maxLeases))
-		sb.WriteString("    * - Job waiting for lease\n")
-		sb.WriteString("    ! - Job timed out waiting for lease\n")
+	if maxWaiting > 0 {
+		sb.WriteString(fmt.Sprintf("  Waiting rows (>%d):\n", maxLeases))
+		sb.WriteString("    W - Job waiting for lease\n")
 	}
 	sb.WriteString("\n")
 
@@ -210,6 +232,7 @@ func (g *Generator) GenerateLeaseChart(timePoints []simulation.TimePoint, events
 // GenerateEventSummary generates a summary of events
 func (g *Generator) GenerateEventSummary(events []simulation.Event) string {
 	var sb strings.Builder
+	sb.Grow(500) // Small summary, pre-allocate modest buffer
 
 	sb.WriteString("\n")
 	sb.WriteString("Event Summary\n")
@@ -236,6 +259,8 @@ func (g *Generator) GenerateEventSummary(events []simulation.Event) string {
 // GenerateWarnings generates a list of warnings
 func (g *Generator) GenerateWarnings(warnings []simulation.Event) string {
 	var sb strings.Builder
+	// Estimate: ~100 chars per warning + header
+	sb.Grow(len(warnings)*100 + 200)
 
 	sb.WriteString("\n")
 	sb.WriteString("Warnings\n")
@@ -262,6 +287,12 @@ func (g *Generator) GenerateWarnings(warnings []simulation.Event) string {
 // GenerateDetailedTimeline generates a detailed timeline of events
 func (g *Generator) GenerateDetailedTimeline(events []simulation.Event, limit int) string {
 	var sb strings.Builder
+	displayCount := len(events)
+	if limit > 0 && limit < displayCount {
+		displayCount = limit
+	}
+	// Estimate: ~100 chars per event line + header
+	sb.Grow(displayCount*100 + 200)
 
 	sb.WriteString("\n")
 	sb.WriteString("Detailed Timeline")
@@ -271,11 +302,6 @@ func (g *Generator) GenerateDetailedTimeline(events []simulation.Event, limit in
 	sb.WriteString("\n")
 	sb.WriteString(strings.Repeat("=", g.width))
 	sb.WriteString("\n\n")
-
-	displayCount := len(events)
-	if limit > 0 && limit < displayCount {
-		displayCount = limit
-	}
 
 	for i := 0; i < displayCount; i++ {
 		event := events[i]

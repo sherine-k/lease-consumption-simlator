@@ -1,7 +1,7 @@
 # CI Job Lease Simulator Configuration
 
 # Maximum number of concurrent active leases
-maxActiveLeases: 50
+maxActiveLeases: 45
 
 # Maximum time to wait for a job to complete before considering it timed out
 jobTimeoutDuration: 5h15m

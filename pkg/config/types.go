@@ -41,8 +41,8 @@ type Job struct {
 	IsReleaseController bool `yaml:"isReleaseController,omitempty"`
 
 	// Template-based configuration (new format)
-	OnReleaseController bool            `yaml:"onReleaseController,omitempty"`
-	VersionCategory     VersionCategory `yaml:"-"` // Set during job expansion (dev/supported/eus)
+	OnReleaseController []VersionCategory `yaml:"onReleaseController,omitempty"`
+	VersionCategory     VersionCategory   `yaml:"-"` // Set during job expansion (dev/supported/eus)
 }
 
 // TriggerType defines how a job is triggered
@@ -64,10 +64,11 @@ const (
 
 // JobInstance represents a specific execution of a job
 type JobInstance struct {
-	Job       *Job
-	StartTime time.Time
-	EndTime   time.Time
-	LeaseAcquired bool
-	LeaseWaitTime time.Duration
-	TimedOut   bool
+	Job              *Job
+	StartTime        time.Time // Original scheduled start time (never changes)
+	ActualStartTime  time.Time // When the job actually started running (after acquiring lease)
+	EndTime          time.Time
+	LeaseAcquired    bool
+	LeaseWaitTime    time.Duration
+	TimedOut         bool
 }

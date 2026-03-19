@@ -28,28 +28,28 @@ devLeaseBuffer: 0
 meanDuration: 3h
 jobDurationStdDev: 1h
 
-# CI jobs for each version of openshift, and whether or not they are configured to run on the release controller
+# CI jobs for each version of openshift, and which release controller categories they run on
 jobs:
   - name: e2e-conformance-parallel-single
-    onReleaseController: true
+    onReleaseController: [dev, supported, eus]
   - name: e2e-conformance-parallel-multi
-    onReleaseController: false
+    # No onReleaseController - cron only
   - name: e2e-conformance-serial
-    onReleaseController: false
+    # No onReleaseController - cron only
   - name: e2e-fips
-    onReleaseController: false
+    # No onReleaseController - cron only
   - name: e2e-upgrade
-    onReleaseController: false
+    # No onReleaseController - cron only
   - name: e2e-tech-preview-parallel
-    onReleaseController: false
+    # No onReleaseController - cron only
   - name: e2e-tech-preview-serial
-    onReleaseController: false
+    # No onReleaseController - cron only
   - name: e2e-image-ecosystem
-    onReleaseController: false
+    # No onReleaseController - cron only
   - name: e2e-jenkins
-    onReleaseController: false
+    # No onReleaseController - cron only
   - name: e2e-compact
-    onReleaseController: false
+    # No onReleaseController - cron only
   - name: e2e-agent
-    onReleaseController: false
+    # No onReleaseController - cron only
 

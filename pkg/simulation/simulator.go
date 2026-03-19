@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/robfig/cron/v3"
@@ -72,9 +71,9 @@ func (s *Simulator) generateJobInstances() []*config.JobInstance {
 	for i := range s.config.Jobs {
 		job := &s.config.Jobs[i]
 
-		// For new template format: jobs with OnReleaseController=true trigger on both cron and releases
+		// For new template format: jobs with OnReleaseController set trigger on both cron and releases
 		// For old format: jobs are either cron OR release-controller
-		if job.OnReleaseController {
+		if len(job.OnReleaseController) > 0 {
 			// Template format: generate both cron and release instances
 			cronInstances := s.generateCronInstances(job)
 			instances = append(instances, cronInstances...)
@@ -280,6 +279,24 @@ func (s *Simulator) generateDeveloperSessions() []*config.JobInstance {
 	return instances
 }
 
+// assignLeaseToWaitingJob assigns a freed lease to a waiting job
+func (s *Simulator) assignLeaseToWaitingJob(waitingJob *config.JobInstance, currentTime time.Time, activeJobs *[]*config.JobInstance, activeLeases *int) {
+	waitingJob.LeaseAcquired = true
+	waitingJob.ActualStartTime = currentTime
+	waitingJob.EndTime = currentTime.Add(waitingJob.Job.Duration)
+	*activeLeases++
+	*activeJobs = append(*activeJobs, waitingJob)
+
+	s.addEvent(Event{
+		Time:         currentTime,
+		Type:         EventTypeLeaseAcquired,
+		JobInstance:  waitingJob,
+		ActiveLeases: *activeLeases,
+		Message:      fmt.Sprintf("Job '%s' acquired lease after waiting %s", waitingJob.Job.Name, waitingJob.LeaseWaitTime),
+		WasWaiting:   true,
+	})
+}
+
 // simulateLeaseUsage simulates the lease usage over time
 func (s *Simulator) simulateLeaseUsage(jobInstances []*config.JobInstance) {
 	activeLeases := 0
@@ -303,6 +320,7 @@ func (s *Simulator) simulateLeaseUsage(jobInstances []*config.JobInstance) {
 				// Lease acquired
 				activeLeases++
 				job.LeaseAcquired = true
+				job.ActualStartTime = currentTime // Track when job actually started running
 				activeJobs = append(activeJobs, job)
 
 				s.addEvent(Event{
@@ -327,7 +345,6 @@ func (s *Simulator) simulateLeaseUsage(jobInstances []*config.JobInstance) {
 			} else {
 				// No lease available, job must wait
 				waitingJobs = append(waitingJobs, job)
-				job.LeaseWaitTime = 0
 
 				s.addEvent(Event{
 					Time:         currentTime,
@@ -359,19 +376,7 @@ func (s *Simulator) simulateLeaseUsage(jobInstances []*config.JobInstance) {
 				if len(waitingJobs) > 0 {
 					waitingJob := waitingJobs[0]
 					waitingJobs = waitingJobs[1:]
-
-					waitingJob.LeaseAcquired = true
-								waitingJob.EndTime = currentTime.Add(waitingJob.Job.Duration)
-					activeLeases++
-					remainingJobs = append(remainingJobs, waitingJob)
-
-					s.addEvent(Event{
-						Time:         currentTime,
-						Type:         EventTypeLeaseAcquired,
-						JobInstance:  waitingJob,
-						ActiveLeases: activeLeases,
-						Message:      fmt.Sprintf("Job '%s' acquired lease after waiting %s", waitingJob.Job.Name, waitingJob.LeaseWaitTime),
-					})
+					s.assignLeaseToWaitingJob(waitingJob, currentTime, &remainingJobs, &activeLeases)
 				}
 			} else {
 				remainingJobs = append(remainingJobs, job)
@@ -379,32 +384,11 @@ func (s *Simulator) simulateLeaseUsage(jobInstances []*config.JobInstance) {
 		}
 		activeJobs = remainingJobs
 
-		// Check for waiting job timeouts
-		remainingWaitingJobs := []*config.JobInstance{}
-		for _, job := range waitingJobs {
-			job.LeaseWaitTime += 5 * time.Minute
-
-			if job.LeaseWaitTime >= s.config.LeaseWaitTimeout {
-				job.TimedOut = true
-
-				s.addEvent(Event{
-					Time:         currentTime,
-					Type:         EventTypeJobTimeout,
-					JobInstance:  job,
-					ActiveLeases: activeLeases,
-					Message:      fmt.Sprintf("Job '%s' timed out waiting for lease (waited %s) - lease released", job.Job.Name, job.LeaseWaitTime),
-					IsWarning:    true,
-				})
-			} else {
-				remainingWaitingJobs = append(remainingWaitingJobs, job)
-			}
-		}
-		waitingJobs = remainingWaitingJobs
-
-		// Check for job execution timeouts
+		// Check for job execution timeouts (do this BEFORE waiting timeouts so freed leases can be assigned)
 		stillRunning := []*config.JobInstance{}
 		for _, job := range activeJobs {
-			if currentTime.Sub(job.StartTime) >= s.config.JobTimeoutDuration && !job.TimedOut {
+			// Only check timeout if the job has actually started (ActualStartTime is set)
+			if !job.ActualStartTime.IsZero() && currentTime.Sub(job.ActualStartTime) >= s.config.JobTimeoutDuration && !job.TimedOut {
 				job.TimedOut = true
 				activeLeases--
 				s.addEvent(Event{
@@ -415,11 +399,52 @@ func (s *Simulator) simulateLeaseUsage(jobInstances []*config.JobInstance) {
 					Message:      fmt.Sprintf("Job '%s' exceeded execution timeout (%s)", job.Job.Name, s.config.JobTimeoutDuration),
 					IsWarning:    true,
 				})
+
+				// Try to assign the released lease to a waiting job
+				if len(waitingJobs) > 0 {
+					waitingJob := waitingJobs[0]
+					waitingJobs = waitingJobs[1:]
+					s.assignLeaseToWaitingJob(waitingJob, currentTime, &stillRunning, &activeLeases)
+				}
 			} else {
 				stillRunning = append(stillRunning, job)
 			}
 		}
 		activeJobs = stillRunning
+
+		// Check for waiting job timeouts
+		remainingWaitingJobs := []*config.JobInstance{}
+		for _, job := range waitingJobs {
+			job.LeaseWaitTime += 5 * time.Minute
+
+			if job.LeaseWaitTime >= s.config.LeaseWaitTimeout {
+				job.TimedOut = true
+
+				// Find peak capacity during wait period to provide context
+				peakLeases := s.getPeakLeasesDuringPeriod(job.StartTime, currentTime)
+
+				s.addEvent(Event{
+					Time:         currentTime,
+					Type:         EventTypeJobTimeout,
+					JobInstance:  job,
+					ActiveLeases: activeLeases,
+					Message:      fmt.Sprintf("Job '%s' timed out waiting for lease (waited %s, peak capacity during wait: %d/%d) - lease released", job.Job.Name, job.LeaseWaitTime, peakLeases, s.config.MaxActiveLeases),
+					IsWarning:    true,
+					WasWaiting:   true,
+				})
+			} else {
+				remainingWaitingJobs = append(remainingWaitingJobs, job)
+			}
+		}
+		waitingJobs = remainingWaitingJobs
+
+		// Assign any remaining available leases to waiting jobs
+		// This handles cases where capacity is freed but not all waiting jobs got leases
+		for len(waitingJobs) > 0 && activeLeases < s.config.MaxActiveLeases {
+			waitingJob := waitingJobs[0]
+			waitingJobs = waitingJobs[1:]
+			s.assignLeaseToWaitingJob(waitingJob, currentTime, &activeJobs, &activeLeases)
+		}
 
 		// Move to next time step (5 minute intervals)
 		currentTime = currentTime.Add(5 * time.Minute)
@@ -428,6 +453,23 @@ func (s *Simulator) simulateLeaseUsage(jobInstances []*config.JobInstance) {
 			break
 		}
 	}
+}
+
+// getPeakLeasesDuringPeriod returns the peak active leases during a time period
+func (s *Simulator) getPeakLeasesDuringPeriod(startTime, endTime time.Time) int {
+	peakLeases := 0
+
+	for _, event := range s.events {
+		// Only consider events within the time period
+		if (event.Time.After(startTime) || event.Time.Equal(startTime)) &&
+			(event.Time.Before(endTime) || event.Time.Equal(endTime)) {
+			if event.ActiveLeases > peakLeases {
+				peakLeases = event.ActiveLeases
+			}
+		}
+	}
+
+	return peakLeases
 }
 
 // generateTimePoints generates time points for charting
@@ -451,8 +493,8 @@ func (s *Simulator) generateTimePoints() {
 
 			if event.Type == EventTypeJobWaiting {
 				waitingJobs++
-			} else if event.Type == EventTypeLeaseAcquired && strings.Contains(event.Message, "after waiting") {
-			// Only decrement for jobs that were actually waiting
+			} else if event.WasWaiting {
+				// Job was waiting and either got a lease or timed out - decrement waiting count
 				if waitingJobs > 0 {
 					waitingJobs--
 				}
@@ -467,7 +509,7 @@ func (s *Simulator) generateTimePoints() {
 			WaitingJobs:  waitingJobs,
 		})
 
-		currentTime = currentTime.Add(30 * time.Minute) // Sample every 30 minutes
+		currentTime = currentTime.Add(15 * time.Minute) // Sample every 15 minutes
 	}
 }
 
@@ -488,7 +530,8 @@ func (s *Simulator) GetTimePoints() []TimePoint {
 
 // GetWarnings returns all warning events
 func (s *Simulator) GetWarnings() []Event {
-	warnings := []Event{}
+	// Pre-allocate with estimated capacity (most events won't be warnings, so use smaller capacity)
+	warnings := make([]Event, 0, len(s.events)/10)
 	for _, event := range s.events {
 		if event.IsWarning {
 			warnings = append(warnings, event)
