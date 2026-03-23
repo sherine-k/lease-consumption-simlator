@@ -16,7 +16,7 @@ simulationDuration: 168h
 devVersions: 1
 
 # Number of actively supported openshift versions
-supportedVersions: 5
+supportedVersions: 6
 
 # Number of EUS releases
 eusVersions: 5
@@ -25,7 +25,7 @@ eusVersions: 5
 devLeaseBuffer: 5
 
 # Job duration variables
-meanDuration: 3h
+meanDuration: 3h30m
 jobDurationStdDev: 1h
 
 # CI jobs for each version of openshift, and which release controller categories they run on
@@ -52,4 +52,6 @@ jobs:
     # No onReleaseController - cron only
   - name: e2e-agent
     # No onReleaseController - cron only
+  - name: e2e-layered-operator
+    onReleaseController: [dev]
 

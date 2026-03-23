@@ -122,8 +122,12 @@ func (g *Generator) GenerateLeaseChart(timePoints []simulation.TimePoint, events
 			waitingRow := row - maxLeases
 
 			if waitingRow <= ep.WaitingJobs {
-				// Show waiting
-				sb.WriteString("W")
+				// Show timeout if present, otherwise show waiting
+				if ep.HasTimeout {
+					sb.WriteString("T")
+				} else {
+					sb.WriteString("W")
+				}
 			} else {
 				sb.WriteString(" ")
 			}
@@ -223,6 +227,7 @@ func (g *Generator) GenerateLeaseChart(timePoints []simulation.TimePoint, events
 	if maxWaiting > 0 {
 		sb.WriteString(fmt.Sprintf("  Waiting rows (>%d):\n", maxLeases))
 		sb.WriteString("    W - Job waiting for lease\n")
+		sb.WriteString("    T - Job timeout (waiting or execution)\n")
 	}
 	sb.WriteString("\n")
 

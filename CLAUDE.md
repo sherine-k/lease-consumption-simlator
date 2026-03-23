@@ -127,7 +127,7 @@ Uses `github.com/robfig/cron/v3` parser with all fields enabled (Minute|Hour|Dom
 Release controller jobs are simulated with random intervals that vary by version category:
 - **Dev versions**: 4-8 hours between releases (frequent development builds)
 - **Supported versions**: 4-24 hours between releases (regular updates)
-- **EUS versions**: 4 hours to 5 days between releases (infrequent updates)
+- **EUS versions**: 4 hours to 2 days between releases (infrequent updates)
 
 Jobs are grouped by version, and each version has independent release events. In template-based configs, jobs with `onReleaseController: true` trigger on BOTH:
 1. Daily cron schedule (auto-staggered across 24 hours)

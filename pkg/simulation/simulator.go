@@ -139,7 +139,7 @@ func (s *Simulator) generateCronInstances(job *config.Job) []*config.JobInstance
 // Frequency depends on version category:
 // - Dev: 4-8 hours
 // - Supported: 4-24 hours
-// - EUS: 4 hours - 5 days
+// - EUS: 4 hours - 2 days
 func (s *Simulator) generateReleaseEvents(category config.VersionCategory) []time.Time {
 	releaseEvents := []time.Time{}
 
@@ -154,7 +154,7 @@ func (s *Simulator) generateReleaseEvents(category config.VersionCategory) []tim
 		maxHours = 24
 	case config.VersionCategoryEus:
 		minHours = 4
-		maxHours = 120 // 5 days
+		maxHours = 48 // 2 days
 	default:
 		// Fallback to dev timings
 		minHours = 4
@@ -321,6 +321,7 @@ func (s *Simulator) simulateLeaseUsage(jobInstances []*config.JobInstance) {
 				activeLeases++
 				job.LeaseAcquired = true
 				job.ActualStartTime = currentTime // Track when job actually started running
+				job.EndTime = currentTime.Add(job.Job.Duration) // Update EndTime based on actual start
 				activeJobs = append(activeJobs, job)
 
 				s.addEvent(Event{
@@ -357,6 +358,44 @@ func (s *Simulator) simulateLeaseUsage(jobInstances []*config.JobInstance) {
 			}
 		}
 
+		// Check for job execution timeouts FIRST (before completions)
+		// Only timeout jobs whose Duration exceeds the timeout threshold
+		// (jobs that complete naturally before timeout should not timeout)
+		stillRunning := []*config.JobInstance{}
+		for _, job := range activeJobs {
+			// Only timeout if:
+			// 1. Job has started (ActualStartTime is set)
+			// 2. Job's calculated Duration exceeds timeout threshold
+			// 3. Runtime has reached or exceeded the timeout
+			// 4. Job hasn't already timed out
+			runtime := currentTime.Sub(job.ActualStartTime)
+			if !job.ActualStartTime.IsZero() &&
+			   job.Job.Duration > s.config.JobTimeoutDuration &&
+			   runtime >= s.config.JobTimeoutDuration &&
+			   !job.TimedOut {
+				job.TimedOut = true
+				activeLeases--
+				s.addEvent(Event{
+					Time:         currentTime,
+					Type:         EventTypeJobTimeout,
+					JobInstance:  job,
+					ActiveLeases: activeLeases,
+					Message:      fmt.Sprintf("Job '%s' exceeded execution timeout (%s), Duration was %s", job.Job.Name, s.config.JobTimeoutDuration, job.Job.Duration),
+					IsWarning:    true,
+				})
+
+				// Try to assign the released lease to a waiting job
+				if len(waitingJobs) > 0 {
+					waitingJob := waitingJobs[0]
+					waitingJobs = waitingJobs[1:]
+					s.assignLeaseToWaitingJob(waitingJob, currentTime, &stillRunning, &activeLeases)
+				}
+			} else {
+				stillRunning = append(stillRunning, job)
+			}
+		}
+		activeJobs = stillRunning
+
 		// Check for jobs that should finish
 		remainingJobs := []*config.JobInstance{}
 		for _, job := range activeJobs {
@@ -383,34 +422,6 @@ func (s *Simulator) simulateLeaseUsage(jobInstances []*config.JobInstance) {
 			}
 		}
 		activeJobs = remainingJobs
-
-		// Check for job execution timeouts (do this BEFORE waiting timeouts so freed leases can be assigned)
-		stillRunning := []*config.JobInstance{}
-		for _, job := range activeJobs {
-			// Only check timeout if the job has actually started (ActualStartTime is set)
-			if !job.ActualStartTime.IsZero() && currentTime.Sub(job.ActualStartTime) >= s.config.JobTimeoutDuration && !job.TimedOut {
-				job.TimedOut = true
-				activeLeases--
-				s.addEvent(Event{
-					Time:         currentTime,
-					Type:         EventTypeJobTimeout,
-					JobInstance:  job,
-					ActiveLeases: activeLeases,
-					Message:      fmt.Sprintf("Job '%s' exceeded execution timeout (%s)", job.Job.Name, s.config.JobTimeoutDuration),
-					IsWarning:    true,
-				})
-
-				// Try to assign the released lease to a waiting job
-				if len(waitingJobs) > 0 {
-					waitingJob := waitingJobs[0]
-					waitingJobs = waitingJobs[1:]
-					s.assignLeaseToWaitingJob(waitingJob, currentTime, &stillRunning, &activeLeases)
-				}
-			} else {
-				stillRunning = append(stillRunning, job)
-			}
-		}
-		activeJobs = stillRunning
 
 		// Check for waiting job timeouts
 		remainingWaitingJobs := []*config.JobInstance{}
