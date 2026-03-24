@@ -1,0 +1,64 @@
+# CI Job Lease Simulator Configuration
+
+# Maximum number of concurrent active leases
+maxActiveLeases: 10
+
+# Maximum time to wait for a job to complete before considering it timed out
+jobTimeoutDuration: 5h15m
+
+# Maximum time a job can wait for a lease before timing out
+leaseWaitTimeout: 5h
+
+# Duration of the simulation
+simulationDuration: 168h
+
+# Number of openshift development releases
+devVersions: 1
+
+# Number of actively supported openshift versions
+supportedVersions: 5
+
+# Number of EUS releases
+eusVersions: 3
+
+# Number of leases as a "buffer" for developer testing
+devLeaseBuffer: 0
+
+# Job duration variables
+meanDuration: 3h
+jobDurationStdDev: 1h
+
+# Release controller interval configuration (optional - defaults shown below)
+# Controls mean/stdDeviation time between release events for each version category
+# devReleaseIntervalMean: 6h
+# devReleaseIntervalStdDev: 1h
+# supportedReleaseIntervalMean: 12h
+# supportedReleaseIntervalStdDev: 4h
+# eusReleaseIntervalMean: 24h
+# eusReleaseIntervalStdDev: 8h
+
+# CI jobs for each version of openshift, and which release controller categories they run on
+jobs:
+  - name: e2e-conformance-parallel-single
+    onReleaseController: [dev, supported, eus]
+  - name: e2e-conformance-parallel-multi
+    # No onReleaseController - cron only
+  - name: e2e-conformance-serial
+    # No onReleaseController - cron only
+  - name: e2e-fips
+    # No onReleaseController - cron only
+  - name: e2e-upgrade
+    # No onReleaseController - cron only
+  - name: e2e-tech-preview-parallel
+    # No onReleaseController - cron only
+  - name: e2e-tech-preview-serial
+    # No onReleaseController - cron only
+  - name: e2e-image-ecosystem
+    # No onReleaseController - cron only
+  - name: e2e-jenkins
+    # No onReleaseController - cron only
+  - name: e2e-compact
+    # No onReleaseController - cron only
+  - name: e2e-agent
+    # No onReleaseController - cron only
+

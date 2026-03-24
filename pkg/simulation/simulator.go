@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/robfig/cron/v3"
@@ -18,6 +19,35 @@ type Simulator struct {
 	currentTime     time.Time
 	simulationStart time.Time
 	simulationEnd   time.Time
+}
+
+var (
+	// Package-level RNG for Gaussian duration calculation
+	rng  *rand.Rand
+	once sync.Once
+)
+
+// initRNG initializes the package-level random number generator once
+func initRNG() {
+	once.Do(func() {
+		rng = rand.New(rand.NewSource(time.Now().UnixNano()))
+	})
+}
+
+// CalculateGaussianDuration calculates a duration from a Gaussian (normal) distribution
+// given a mean duration and standard deviation. Ensures the result is always positive.
+func calculateGaussianDuration(meanDuration, stdDev time.Duration) time.Duration {
+	initRNG()
+	// Generate duration from normal distribution: mean + stddev * N(0,1)
+	gaussianValue := rng.NormFloat64()
+	durationSeconds := meanDuration.Seconds() + (stdDev.Seconds() * gaussianValue)
+
+	// Ensure duration is positive (use 10% of mean as minimum)
+	if durationSeconds < 0 {
+		durationSeconds = meanDuration.Seconds() * 0.1
+	}
+
+	return time.Duration(durationSeconds * float64(time.Second))
 }
 
 // NewSimulator creates a new simulator
@@ -44,11 +74,21 @@ func NewSimulator(cfg *config.Config) *Simulator {
 	}
 }
 
+// calculateInstanceDuration calculates a duration for a job instance using Gaussian distribution
+func (s *Simulator) calculateInstanceDuration(job *config.Job) (time.Duration, error) {
+
+	return calculateGaussianDuration(s.config.MeanDuration, s.config.JobDurationStandardDeviation), nil
+}
+
 // Run executes the simulation
 func (s *Simulator) Run() error {
 	// Generate all job instances for the simulation period
-	jobInstances := s.generateJobInstances()
+	jobInstances, err := s.generateJobInstances()
+	if err != nil {
+		return err
+	}
 
+	// Instances generated successfully
 	// Sort job instances by start time
 	sort.Slice(jobInstances, func(i, j int) bool {
 		return jobInstances[i].StartTime.Before(jobInstances[j].StartTime)
@@ -64,42 +104,64 @@ func (s *Simulator) Run() error {
 }
 
 // generateJobInstances generates all job instances for the simulation period
-func (s *Simulator) generateJobInstances() []*config.JobInstance {
+func (s *Simulator) generateJobInstances() ([]*config.JobInstance, error) {
 	instances := []*config.JobInstance{}
 	releaseControllerJobs := []*config.Job{}
 
 	for i := range s.config.Jobs {
 		job := &s.config.Jobs[i]
 
-		switch job.TriggerType {
-		case config.TriggerTypeCron:
-			// Parse cron schedule and generate instances
-			cronInstances := s.generateCronInstances(job)
+		// For new template format: jobs with OnReleaseController set trigger on both cron and releases
+		// For old format: jobs are either cron OR release-controller
+		if len(job.OnReleaseController) > 0 {
+			// Template format: generate both cron and release instances
+			cronInstances, err := s.generateCronInstances(job)
+			if err != nil {
+				return instances, err
+			}
 			instances = append(instances, cronInstances...)
-		case config.TriggerTypeReleaseController:
-			// Collect all release controller jobs to process together
 			releaseControllerJobs = append(releaseControllerJobs, job)
+		} else {
+			// Old format or template jobs without release controller
+			switch job.TriggerType {
+			case config.TriggerTypeCron:
+				cronInstances, err := s.generateCronInstances(job)
+				if err != nil {
+					return instances, err
+				}
+				instances = append(instances, cronInstances...)
+			case config.TriggerTypeReleaseController:
+				releaseControllerJobs = append(releaseControllerJobs, job)
+			}
 		}
 	}
 
-	// Generate instances for all release controller jobs at the same release events
+	// Generate instances for all release controller jobs
 	if len(releaseControllerJobs) > 0 {
-		rcInstances := s.generateReleaseControllerInstances(releaseControllerJobs)
+		rcInstances, err := s.generateReleaseControllerInstances(releaseControllerJobs)
+		if err != nil {
+			return instances, err
+		}
 		instances = append(instances, rcInstances...)
 	}
 
-	return instances
+	// Generate developer session instances
+	if s.config.DevLeaseBuffer > 0 {
+		devSessions := s.generateDeveloperSessions()
+		instances = append(instances, devSessions...)
+	}
+
+	return instances, nil
 }
 
 // generateCronInstances generates job instances based on cron schedule
-func (s *Simulator) generateCronInstances(job *config.Job) []*config.JobInstance {
+func (s *Simulator) generateCronInstances(job *config.Job) ([]*config.JobInstance, error) {
 	instances := []*config.JobInstance{}
 
 	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
 	schedule, err := parser.Parse(job.CronSchedule)
 	if err != nil {
-		fmt.Printf("Warning: failed to parse cron schedule for job %s: %v\n", job.Name, err)
-		return instances
+		return instances, fmt.Errorf("Warning: failed to parse cron schedule for job %s: %v\n", job.Name, err)
 	}
 
 	currentTime := s.simulationStart
@@ -109,31 +171,57 @@ func (s *Simulator) generateCronInstances(job *config.Job) []*config.JobInstance
 			break
 		}
 
+		// Calculate a unique duration for this instance
+		duration, err := s.calculateInstanceDuration(job)
+		if err != nil {
+			return instances, err
+		}
 		instances = append(instances, &config.JobInstance{
 			Job:       job,
 			StartTime: nextRun,
-			EndTime:   nextRun.Add(job.Duration),
+			EndTime:   nextRun.Add(duration),
+			Duration:  duration,
 		})
 
-		currentTime = nextRun.Add(time.Minute) // Move forward to find next occurrence
+		currentTime = nextRun.Add(time.Second) // Move forward to find next occurrence
 	}
 
-	return instances
+	return instances, nil
 }
 
 // generateReleaseEvents generates release trigger times for a specific version
-func (s *Simulator) generateReleaseEvents() []time.Time {
+// Frequency depends on version category and uses Gaussian distribution for intervals.
+func (s *Simulator) generateReleaseEvents(category config.VersionCategory) []time.Time {
 	releaseEvents := []time.Time{}
 
-	// Generate release events at somewhat random intervals
-	// Average of one release every 6 hours
-	currentTime := s.simulationStart
+	// Determine interval parameters based on version category from config
+	var meanInterval, stdDevInterval time.Duration
+	switch category {
+	case config.VersionCategoryDev:
+		meanInterval = s.config.DevReleaseIntervalMean
+		stdDevInterval = s.config.DevReleaseIntervalStdDev
+	case config.VersionCategorySupported:
+		meanInterval = s.config.SupportedReleaseIntervalMean
+		stdDevInterval = s.config.SupportedReleaseIntervalStdDev
+	case config.VersionCategoryEus:
+		meanInterval = s.config.EusReleaseIntervalMean
+		stdDevInterval = s.config.EusReleaseIntervalStdDev
+	default:
+		// Fallback to dev timings
+		meanInterval = s.config.DevReleaseIntervalMean
+		stdDevInterval = s.config.DevReleaseIntervalStdDev
+	}
+
+	// Start at a random offset using Gaussian distribution (within first interval)
+	initialOffset := calculateGaussianDuration(meanInterval, stdDevInterval)
+	currentTime := s.simulationStart.Add(initialOffset)
 
 	for currentTime.Before(s.simulationEnd) {
 		releaseEvents = append(releaseEvents, currentTime)
 
-		// Next release in 4-8 hours (random interval, averaging ~6 hours)
-		currentTime = currentTime.Add(4*time.Hour + time.Duration(rand.Intn(5))*time.Hour)
+		// Calculate next interval using Gaussian distribution
+		interval := calculateGaussianDuration(meanInterval, stdDevInterval)
+		currentTime = currentTime.Add(interval)
 	}
 
 	return releaseEvents
@@ -141,36 +229,132 @@ func (s *Simulator) generateReleaseEvents() []time.Time {
 
 // generateReleaseControllerInstances generates job instances for all release controller jobs
 // Jobs are grouped by version, and each version has independent release events
-func (s *Simulator) generateReleaseControllerInstances(jobs []*config.Job) []*config.JobInstance {
+func (s *Simulator) generateReleaseControllerInstances(jobs []*config.Job) ([]*config.JobInstance, error) {
 	instances := []*config.JobInstance{}
 
 	// Group jobs by version
-	jobsByVersion := make(map[string][]*config.Job)
+	type versionInfo struct {
+		jobs     []*config.Job
+		category config.VersionCategory
+	}
+	jobsByVersion := make(map[string]*versionInfo)
+
 	for _, job := range jobs {
-		jobsByVersion[job.Version] = append(jobsByVersion[job.Version], job)
+		if jobsByVersion[job.Version] == nil {
+			jobsByVersion[job.Version] = &versionInfo{
+				jobs:     []*config.Job{},
+				category: job.VersionCategory,
+			}
+		}
+		jobsByVersion[job.Version].jobs = append(jobsByVersion[job.Version].jobs, job)
 	}
 
-	// For each version, generate independent release events
-	for version, versionJobs := range jobsByVersion {
-		// Generate release event times for this version
-		releaseEvents := s.generateReleaseEvents()
+	// For each version, generate independent release events based on its category
+	for _, info := range jobsByVersion {
+		// Generate release event times for this version using its category
+		releaseEvents := s.generateReleaseEvents(info.category)
 
 		// For each release event, create instances for ALL jobs in this version
 		for _, releaseTime := range releaseEvents {
-			for _, job := range versionJobs {
+			for _, job := range info.jobs {
+				// Calculate a unique duration for this instance
+				duration, err := s.calculateInstanceDuration(job)
+				if err != nil {
+					return instances, err
+				}
+
 				instances = append(instances, &config.JobInstance{
 					Job:       job,
 					StartTime: releaseTime,
-					EndTime:   releaseTime.Add(job.Duration),
+					EndTime:   releaseTime.Add(duration),
+					Duration:  duration,
 				})
 			}
 		}
+	}
 
-		// Optional: log the number of release events generated for this version
-		_ = version // Use version if needed for debugging
+	return instances, nil
+}
+
+// generateDeveloperSessions generates synthetic developer testing session instances
+// These represent ad-hoc developer usage of leases for testing
+func (s *Simulator) generateDeveloperSessions() []*config.JobInstance {
+	instances := []*config.JobInstance{}
+
+	if s.config.DevLeaseBuffer == 0 {
+		return instances
+	}
+
+	// Calculate how many sessions to generate
+	// Target: 40% average utilization of devLeaseBuffer
+	targetUtilization := 0.4
+	targetConcurrentSessions := float64(s.config.DevLeaseBuffer) * targetUtilization
+
+	// Average session duration from mean
+	avgSessionDuration := s.config.MeanDuration
+
+	// Total dev-hours needed across simulation
+	simulationHours := s.config.SimulationDuration.Hours()
+	totalDevHours := simulationHours * targetConcurrentSessions
+
+	// Number of sessions to generate
+	numSessions := int(totalDevHours / avgSessionDuration.Hours())
+
+	// Create a synthetic "developer" job for duration calculation
+	devJob := &config.Job{
+		Name:        "developer-session",
+		Version:     "dev",
+		Scenario:    "developer-testing",
+		PayloadType: "dev",
+		TriggerType: config.TriggerTypeCron, // Doesn't matter, won't be used
+	}
+
+	// Create RNG for generating random values
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	// Generate random session start times across simulation period
+	for i := 0; i < numSessions; i++ {
+		// Random start time within simulation period
+		randomOffsetSeconds := rng.Int63n(int64(s.config.SimulationDuration.Seconds()))
+		startTime := s.simulationStart.Add(time.Duration(randomOffsetSeconds) * time.Second)
+
+		// Calculate duration using Gaussian distribution
+		duration := calculateGaussianDuration(s.config.MeanDuration, s.config.JobDurationStandardDeviation)
+		endTime := startTime.Add(duration)
+
+		// Only include if it starts before simulation end
+		if startTime.Before(s.simulationEnd) {
+			instances = append(instances, &config.JobInstance{
+				Job:       devJob,
+				StartTime: startTime,
+				EndTime:   endTime,
+				Duration:  duration,
+			})
+		}
 	}
 
 	return instances
+}
+
+// assignLeaseToWaitingJob assigns a freed lease to a waiting job
+func (s *Simulator) assignLeaseToWaitingJob(waitingJob *config.JobInstance, currentTime time.Time, activeJobs *[]*config.JobInstance, activeLeases *int) {
+	waitingJob.LeaseAcquired = true
+	waitingJob.ActualStartTime = currentTime
+
+	// Set new EndTime based on when the job actually starts, using the pre-calculated Duration
+	waitingJob.EndTime = currentTime.Add(waitingJob.Duration)
+
+	*activeLeases++
+	*activeJobs = append(*activeJobs, waitingJob)
+
+	s.addEvent(Event{
+		Time:         currentTime,
+		Type:         EventTypeLeaseAcquired,
+		JobInstance:  waitingJob,
+		ActiveLeases: *activeLeases,
+		Message:      fmt.Sprintf("Job '%s' acquired lease after waiting %s", waitingJob.Job.Name, waitingJob.LeaseWaitTime),
+		WasWaiting:   true,
+	})
 }
 
 // simulateLeaseUsage simulates the lease usage over time
@@ -196,6 +380,13 @@ func (s *Simulator) simulateLeaseUsage(jobInstances []*config.JobInstance) {
 				// Lease acquired
 				activeLeases++
 				job.LeaseAcquired = true
+				job.ActualStartTime = currentTime // Track when job actually started running
+				// Only update EndTime if job had to wait (ActualStartTime != original StartTime)
+				if !job.ActualStartTime.Equal(job.StartTime) {
+					// Job waited, recalculate end time from actual start using pre-calculated Duration
+					job.EndTime = currentTime.Add(job.Duration)
+				}
+				// else: job started on time, keep the original EndTime
 				activeJobs = append(activeJobs, job)
 
 				s.addEvent(Event{
@@ -220,7 +411,6 @@ func (s *Simulator) simulateLeaseUsage(jobInstances []*config.JobInstance) {
 			} else {
 				// No lease available, job must wait
 				waitingJobs = append(waitingJobs, job)
-				job.LeaseWaitTime = 0
 
 				s.addEvent(Event{
 					Time:         currentTime,
@@ -232,6 +422,41 @@ func (s *Simulator) simulateLeaseUsage(jobInstances []*config.JobInstance) {
 				})
 			}
 		}
+
+		// Check for job execution timeouts FIRST (before completions)
+		// Only timeout jobs whose Duration exceeds the timeout threshold
+		// (jobs that complete naturally before timeout should not timeout)
+		stillRunning := []*config.JobInstance{}
+		for _, job := range activeJobs {
+			// Only timeout if:
+			// 1. Job has started (ActualStartTime is set)
+			// 2. Difference between currentTime and (original) StartTime exceeds timeout threshold
+			// 3. Job hasn't already timed out
+			overallRuntime := currentTime.Sub(job.StartTime)
+			if overallRuntime > s.config.JobTimeoutDuration &&
+				!job.TimedOut {
+				job.TimedOut = true
+				activeLeases--
+				s.addEvent(Event{
+					Time:         currentTime,
+					Type:         EventTypeJobTimeout,
+					JobInstance:  job,
+					ActiveLeases: activeLeases,
+					Message:      fmt.Sprintf("Job '%s' exceeded execution timeout (%s), expected duration was %s, but was %s and waited %s", job.Job.Name, s.config.JobTimeoutDuration, job.Duration, overallRuntime, currentTime.Sub(job.StartTime)),
+					IsWarning:    true,
+				})
+
+				// Try to assign the released lease to a waiting job
+				if len(waitingJobs) > 0 {
+					waitingJob := waitingJobs[0]
+					waitingJobs = waitingJobs[1:]
+					s.assignLeaseToWaitingJob(waitingJob, currentTime, &stillRunning, &activeLeases)
+				}
+			} else {
+				stillRunning = append(stillRunning, job)
+			}
+		}
+		activeJobs = stillRunning
 
 		// Check for jobs that should finish
 		remainingJobs := []*config.JobInstance{}
@@ -252,20 +477,7 @@ func (s *Simulator) simulateLeaseUsage(jobInstances []*config.JobInstance) {
 				if len(waitingJobs) > 0 {
 					waitingJob := waitingJobs[0]
 					waitingJobs = waitingJobs[1:]
-
-					waitingJob.LeaseAcquired = true
-					// waitingJob.StartTime = currentTime
-					waitingJob.EndTime = currentTime.Add(waitingJob.Job.Duration)
-					activeLeases++
-					remainingJobs = append(remainingJobs, waitingJob)
-
-					s.addEvent(Event{
-						Time:         currentTime,
-						Type:         EventTypeLeaseAcquired,
-						JobInstance:  waitingJob,
-						ActiveLeases: activeLeases,
-						Message:      fmt.Sprintf("Job '%s' acquired lease after waiting %s", waitingJob.Job.Name, waitingJob.LeaseWaitTime),
-					})
+					s.assignLeaseToWaitingJob(waitingJob, currentTime, &remainingJobs, &activeLeases)
 				}
 			} else {
 				remainingJobs = append(remainingJobs, job)
@@ -281,13 +493,17 @@ func (s *Simulator) simulateLeaseUsage(jobInstances []*config.JobInstance) {
 			if job.LeaseWaitTime >= s.config.LeaseWaitTimeout {
 				job.TimedOut = true
 
+				// Find peak capacity during wait period to provide context
+				peakLeases := s.getPeakLeasesDuringPeriod(job.StartTime, currentTime)
+
 				s.addEvent(Event{
 					Time:         currentTime,
 					Type:         EventTypeJobTimeout,
 					JobInstance:  job,
 					ActiveLeases: activeLeases,
-					Message:      fmt.Sprintf("Job '%s' timed out waiting for lease (waited %s) - lease released", job.Job.Name, job.LeaseWaitTime),
+					Message:      fmt.Sprintf("Job '%s' timed out waiting for lease (waited %s, peak capacity during wait: %d/%d) - lease released", job.Job.Name, job.LeaseWaitTime, peakLeases, s.config.MaxActiveLeases),
 					IsWarning:    true,
+					WasWaiting:   true,
 				})
 			} else {
 				remainingWaitingJobs = append(remainingWaitingJobs, job)
@@ -295,25 +511,13 @@ func (s *Simulator) simulateLeaseUsage(jobInstances []*config.JobInstance) {
 		}
 		waitingJobs = remainingWaitingJobs
 
-		// Check for job execution timeouts
-		stillRunning := []*config.JobInstance{}
-		for _, job := range activeJobs {
-			if currentTime.Sub(job.StartTime) >= s.config.JobTimeoutDuration && !job.TimedOut {
-				job.TimedOut = true
-				activeLeases--
-				s.addEvent(Event{
-					Time:         currentTime,
-					Type:         EventTypeJobTimeout,
-					JobInstance:  job,
-					ActiveLeases: activeLeases,
-					Message:      fmt.Sprintf("Job '%s' exceeded execution timeout (%s)", job.Job.Name, s.config.JobTimeoutDuration),
-					IsWarning:    true,
-				})
-			} else {
-				stillRunning = append(stillRunning, job)
-			}
+		// Assign any remaining available leases to waiting jobs
+		// This handles cases where capacity is freed but not all waiting jobs got leases
+		for len(waitingJobs) > 0 && activeLeases < s.config.MaxActiveLeases {
+			waitingJob := waitingJobs[0]
+			waitingJobs = waitingJobs[1:]
+			s.assignLeaseToWaitingJob(waitingJob, currentTime, &activeJobs, &activeLeases)
 		}
-		activeJobs = stillRunning
 
 		// Move to next time step (5 minute intervals)
 		currentTime = currentTime.Add(5 * time.Minute)
@@ -322,6 +526,23 @@ func (s *Simulator) simulateLeaseUsage(jobInstances []*config.JobInstance) {
 			break
 		}
 	}
+}
+
+// getPeakLeasesDuringPeriod returns the peak active leases during a time period
+func (s *Simulator) getPeakLeasesDuringPeriod(startTime, endTime time.Time) int {
+	peakLeases := 0
+
+	for _, event := range s.events {
+		// Only consider events within the time period
+		if (event.Time.After(startTime) || event.Time.Equal(startTime)) &&
+			(event.Time.Before(endTime) || event.Time.Equal(endTime)) {
+			if event.ActiveLeases > peakLeases {
+				peakLeases = event.ActiveLeases
+			}
+		}
+	}
+
+	return peakLeases
 }
 
 // generateTimePoints generates time points for charting
@@ -338,14 +559,23 @@ func (s *Simulator) generateTimePoints() {
 	eventIndex := 0
 
 	for currentTime.Before(s.simulationEnd) || currentTime.Equal(s.simulationEnd) {
+		// Track peak active leases during this interval
+		peakActiveLeases := activeLeases
+
 		// Process all events up to current time
 		for eventIndex < len(s.events) && (s.events[eventIndex].Time.Before(currentTime) || s.events[eventIndex].Time.Equal(currentTime)) {
 			event := s.events[eventIndex]
 			activeLeases = event.ActiveLeases
 
+			// Track peak during this time interval
+			if activeLeases > peakActiveLeases {
+				peakActiveLeases = activeLeases
+			}
+
 			if event.Type == EventTypeJobWaiting {
 				waitingJobs++
-			} else if event.Type == EventTypeLeaseAcquired {
+			} else if event.WasWaiting {
+				// Job was waiting and either got a lease or timed out - decrement waiting count
 				if waitingJobs > 0 {
 					waitingJobs--
 				}
@@ -356,11 +586,11 @@ func (s *Simulator) generateTimePoints() {
 
 		s.timePoints = append(s.timePoints, TimePoint{
 			Time:         currentTime,
-			ActiveLeases: activeLeases,
+			ActiveLeases: peakActiveLeases, // Use peak instead of final value
 			WaitingJobs:  waitingJobs,
 		})
 
-		currentTime = currentTime.Add(30 * time.Minute) // Sample every 30 minutes
+		currentTime = currentTime.Add(15 * time.Minute) // Sample every 15 minutes
 	}
 }
 
@@ -379,9 +609,20 @@ func (s *Simulator) GetTimePoints() []TimePoint {
 	return s.timePoints
 }
 
+// GetSimulationStart returns the simulation start time
+func (s *Simulator) GetSimulationStart() time.Time {
+	return s.simulationStart
+}
+
+// GetSimulationEnd returns the simulation end time
+func (s *Simulator) GetSimulationEnd() time.Time {
+	return s.simulationEnd
+}
+
 // GetWarnings returns all warning events
 func (s *Simulator) GetWarnings() []Event {
-	warnings := []Event{}
+	// Pre-allocate with estimated capacity (most events won't be warnings, so use smaller capacity)
+	warnings := make([]Event, 0, len(s.events)/10)
 	for _, event := range s.events {
 		if event.IsWarning {
 			warnings = append(warnings, event)

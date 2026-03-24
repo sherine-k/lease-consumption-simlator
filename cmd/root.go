@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/sherine-k/leases/pkg/chart"
 	"github.com/sherine-k/leases/pkg/config"
@@ -14,6 +16,7 @@ var (
 	showTimeline     bool
 	timelineLimit    int
 	showEventSummary bool
+	outputFile       string
 )
 
 var rootCmd = &cobra.Command{
@@ -37,6 +40,7 @@ func init() {
 	rootCmd.Flags().BoolVarP(&showTimeline, "timeline", "t", false, "Show detailed timeline of events")
 	rootCmd.Flags().IntVarP(&timelineLimit, "timeline-limit", "l", 50, "Limit number of timeline events to display")
 	rootCmd.Flags().BoolVarP(&showEventSummary, "summary", "s", true, "Show event summary")
+	rootCmd.Flags().StringVarP(&outputFile, "output", "o", "simulation-report.txt", "Path to output file for event summary and warnings")
 }
 
 func runSimulation(cmd *cobra.Command, args []string) error {
@@ -46,12 +50,16 @@ func runSimulation(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to load configuration: %w", err)
 	}
 
-	fmt.Printf("Loaded configuration from %s\n", configFile)
-	fmt.Printf("  - Max Active Leases: %d\n", cfg.MaxActiveLeases)
-	fmt.Printf("  - Job Timeout: %s\n", cfg.JobTimeoutDuration)
-	fmt.Printf("  - Lease Wait Timeout: %s\n", cfg.LeaseWaitTimeout)
-	fmt.Printf("  - Simulation Duration: %s\n", cfg.SimulationDuration)
-	fmt.Printf("  - Jobs: %d\n\n", len(cfg.Jobs))
+	// Build configuration summary
+	configSummary := fmt.Sprintf("Loaded configuration from %s\n", configFile)
+	configSummary += fmt.Sprintf("  - Max Active Leases: %d\n", cfg.MaxActiveLeases)
+	configSummary += fmt.Sprintf("  - Job Timeout: %s\n", cfg.JobTimeoutDuration)
+	configSummary += fmt.Sprintf("  - Lease Wait Timeout: %s\n", cfg.LeaseWaitTimeout)
+	configSummary += fmt.Sprintf("  - Simulation Duration: %s\n", cfg.SimulationDuration)
+	configSummary += fmt.Sprintf("  - Jobs: %d\n\n", len(cfg.Jobs))
+
+	// Display config summary to console
+	fmt.Print(configSummary)
 
 	// Create and run simulator
 	sim := simulation.NewSimulator(cfg)
@@ -59,32 +67,43 @@ func runSimulation(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("simulation failed: %w", err)
 	}
 
-	// Generate and display chart
+	// Generate outputs
 	chartGen := chart.NewGenerator()
 
 	timePoints := sim.GetTimePoints()
 	events := sim.GetEvents()
 	warnings := sim.GetWarnings()
+	simStart := sim.GetSimulationStart()
+	simEnd := sim.GetSimulationEnd()
 
-	// Display lease chart
-	leaseChart := chartGen.GenerateLeaseChart(timePoints, events, cfg.MaxActiveLeases)
-	fmt.Println(leaseChart)
+	// Build complete output for file
+	var fileContent strings.Builder
+	fileContent.WriteString(configSummary)
 
-	// Display event summary
-	if showEventSummary {
-		eventSummary := chartGen.GenerateEventSummary(events)
-		fmt.Println(eventSummary)
+	// Use new improved visualization
+	improvedReport := chartGen.GenerateImprovedReport(timePoints, events, cfg.MaxActiveLeases, simStart, simEnd)
+	fileContent.WriteString(improvedReport)
+
+	// Display summary to console
+	fmt.Println(improvedReport)
+
+	// Add old warnings section if there are warnings
+	if len(warnings) > 0 {
+		warningsOutput := chartGen.GenerateWarnings(warnings)
+		fileContent.WriteString(warningsOutput)
 	}
 
-	// Display warnings
-	warningsOutput := chartGen.GenerateWarnings(warnings)
-	fmt.Println(warningsOutput)
-
-	// Display detailed timeline if requested
 	if showTimeline {
 		timeline := chartGen.GenerateDetailedTimeline(events, timelineLimit)
-		fmt.Println(timeline)
+		fileContent.WriteString(timeline)
 	}
+
+	// Write complete output to file
+	if err := os.WriteFile(outputFile, []byte(fileContent.String()), 0644); err != nil {
+		return fmt.Errorf("failed to write output file: %w", err)
+	}
+
+	fmt.Printf("Complete simulation report written to: %s\n", outputFile)
 
 	return nil
 }

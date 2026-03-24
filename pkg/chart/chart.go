@@ -27,189 +27,375 @@ func NewGenerator() *Generator {
 	}
 }
 
-// GenerateLeaseChart generates an ASCII chart showing lease usage over time
-func (g *Generator) GenerateLeaseChart(timePoints []simulation.TimePoint, events []simulation.Event, maxLeases int) string {
-	if len(timePoints) == 0 {
-		return "No data to display"
-	}
-
+// GenerateImprovedReport generates a comprehensive report focused on lease pressure and issues
+func (g *Generator) GenerateImprovedReport(timePoints []simulation.TimePoint, events []simulation.Event, maxLeases int, simulationStart, simulationEnd time.Time) string {
 	var sb strings.Builder
+	sb.Grow(10000) // Pre-allocate for large output
+
+	// Calculate statistics
+	stats := calculateStatistics(timePoints, events, maxLeases)
 
 	// Header
 	sb.WriteString("\n")
-	sb.WriteString("Lease Usage Over Time\n")
-	sb.WriteString(strings.Repeat("=", g.width))
+	sb.WriteString("LEASE SIMULATION ANALYSIS REPORT\n")
+	sb.WriteString(strings.Repeat("=", 100))
 	sb.WriteString("\n\n")
 
-	// Build enhanced time points with timeout information
-	type EnhancedTimePoint struct {
-		ActiveLeases  int
-		WaitingJobs   int
-		TimeoutJobs   int
-	}
+	// Executive Summary
+	sb.WriteString(generateExecutiveSummary(stats, simulationStart, simulationEnd))
 
-	enhancedPoints := make([]EnhancedTimePoint, len(timePoints))
+	// Hourly Breakdown
+	sb.WriteString(generateHourlyBreakdown(timePoints, events, maxLeases, simulationStart))
 
-	for i, tp := range timePoints {
-		timeoutCount := 0
-
-		// Count timeout events at this specific time point
-		for _, event := range events {
-			if event.Time.Equal(tp.Time) && event.Type == simulation.EventTypeJobTimeout {
-				timeoutCount++
-			}
-		}
-
-		enhancedPoints[i] = EnhancedTimePoint{
-			ActiveLeases: tp.ActiveLeases,
-			WaitingJobs:  tp.WaitingJobs,
-			TimeoutJobs:  timeoutCount,
-		}
-	}
-
-	// Find max waiting/timeout jobs to determine chart height
-	maxWaitingAndTimeout := 0
-	for _, ep := range enhancedPoints {
-		total := ep.WaitingJobs + ep.TimeoutJobs
-		if total > maxWaitingAndTimeout {
-			maxWaitingAndTimeout = total
-		}
-	}
-
-	totalRows := maxLeases + maxWaitingAndTimeout
-
-	// Build the chart from top to bottom
-	// First draw waiting/timeout rows (if any)
-	for row := totalRows; row > maxLeases; row-- {
-		// Y-axis label
-		sb.WriteString(fmt.Sprintf("%3d |", row))
-
-		// Plot data points across time
-		for x := 0; x < len(timePoints) && x < g.width-6; x++ {
-			pointIndex := int(float64(x) / float64(g.width-6) * float64(len(timePoints)-1))
-			if pointIndex >= len(enhancedPoints) {
-				pointIndex = len(enhancedPoints) - 1
-			}
-
-			ep := enhancedPoints[pointIndex]
-			waitingRow := row - maxLeases
-
-			if waitingRow <= ep.TimeoutJobs {
-				// Show timeout
-				sb.WriteString("!")
-			} else if waitingRow <= ep.TimeoutJobs+ep.WaitingJobs {
-				// Show waiting
-				sb.WriteString("*")
-			} else {
-				sb.WriteString(" ")
-			}
-		}
-		sb.WriteString("\n")
-	}
-
-	// Separator line between waiting/timeout and lease slots
-	if maxWaitingAndTimeout > 0 {
-		sb.WriteString("    ")
-		sb.WriteString(strings.Repeat("-", g.width-4))
-		sb.WriteString("\n")
-	}
-
-	// Draw lease slots (maxLeases down to 1)
-	for leaseSlot := maxLeases; leaseSlot >= 1; leaseSlot-- {
-		// Y-axis label
-		sb.WriteString(fmt.Sprintf("%3d |", leaseSlot))
-
-		// Plot data points across time
-		for x := 0; x < len(timePoints) && x < g.width-6; x++ {
-			pointIndex := int(float64(x) / float64(g.width-6) * float64(len(timePoints)-1))
-			if pointIndex >= len(enhancedPoints) {
-				pointIndex = len(enhancedPoints) - 1
-			}
-
-			ep := enhancedPoints[pointIndex]
-
-			if ep.ActiveLeases >= leaseSlot {
-				// This lease slot is active
-				sb.WriteString("█")
-			} else {
-				// This lease slot is free
-				sb.WriteString(" ")
-			}
-		}
-		sb.WriteString("\n")
-	}
-
-	// X-axis
-	sb.WriteString("    +")
-	sb.WriteString(strings.Repeat("-", g.width-6))
-	sb.WriteString("\n")
-
-	// X-axis labels - show marks every 24 hours
-	if len(timePoints) > 0 {
-		startTime := timePoints[0].Time
-		endTime := timePoints[len(timePoints)-1].Time
-		totalDuration := endTime.Sub(startTime)
-		chartWidth := g.width - 6
-
-		// Build the label line with day markers
-		labelLine := make([]rune, chartWidth)
-		for i := range labelLine {
-			labelLine[i] = ' '
-		}
-
-		// Place markers every 24 hours
-		day := 0
-		for {
-			dayDuration := time.Duration(day) * 24 * time.Hour
-			if dayDuration > totalDuration {
-				break
-			}
-
-			// Calculate position in chart
-			position := 0
-			if totalDuration > 0 {
-				position = int(float64(dayDuration) / float64(totalDuration) * float64(chartWidth))
-			}
-
-			// Format day marker
-			marker := fmt.Sprintf("%dd", day)
-
-			// Place marker if it fits
-			if position+len(marker) <= chartWidth {
-				for i, ch := range marker {
-					if position+i < chartWidth {
-						labelLine[position+i] = ch
-					}
-				}
-			}
-
-			day++
-		}
-
-		sb.WriteString("    ")
-		sb.WriteString(string(labelLine))
-		sb.WriteString("\n")
-	}
-
-	// Legend
-	sb.WriteString("\n")
-	sb.WriteString("Legend:\n")
-	sb.WriteString(fmt.Sprintf("  Lease slots (1-%d):\n", maxLeases))
-	sb.WriteString("    █ - Active lease\n")
-	sb.WriteString("    (space) - Free lease\n")
-	if maxWaitingAndTimeout > 0 {
-		sb.WriteString(fmt.Sprintf("  Waiting/Timeout rows (>%d):\n", maxLeases))
-		sb.WriteString("    * - Job waiting for lease\n")
-		sb.WriteString("    ! - Job timed out waiting for lease\n")
-	}
-	sb.WriteString("\n")
+	// Problem Timeline (focused on issues)
+	sb.WriteString(generateProblemTimeline(events))
 
 	return sb.String()
+}
+
+// SimulationStats holds calculated statistics
+type SimulationStats struct {
+	AvgLeaseUsage       float64
+	PeakLeaseUsage      int
+	UtilizationPct      float64
+	TotalTimeouts       int
+	TotalWaiting        int
+	MaxWaiting          int
+	PeakUtilization     float64
+	TimeoutPeriods      []TimePeriod
+	HighPressurePeriods []TimePeriod
+}
+
+// TimePeriod represents a time range
+type TimePeriod struct {
+	Start time.Time
+	End   time.Time
+	Count int
+}
+
+func calculateStatistics(timePoints []simulation.TimePoint, events []simulation.Event, maxLeases int) SimulationStats {
+	stats := SimulationStats{}
+
+	if len(timePoints) == 0 {
+		return stats
+	}
+
+	totalUsage := 0
+	maxWaiting := 0
+
+	for _, tp := range timePoints {
+		totalUsage += tp.ActiveLeases
+		if tp.ActiveLeases > stats.PeakLeaseUsage {
+			stats.PeakLeaseUsage = tp.ActiveLeases
+		}
+		if tp.WaitingJobs > maxWaiting {
+			maxWaiting = tp.WaitingJobs
+		}
+	}
+
+	stats.AvgLeaseUsage = float64(totalUsage) / float64(len(timePoints))
+	stats.UtilizationPct = (stats.AvgLeaseUsage / float64(maxLeases)) * 100
+	stats.PeakUtilization = (float64(stats.PeakLeaseUsage) / float64(maxLeases)) * 100
+	stats.MaxWaiting = maxWaiting
+
+	// Count event types
+	for _, event := range events {
+		switch event.Type {
+		case simulation.EventTypeJobTimeout:
+			stats.TotalTimeouts++
+		case simulation.EventTypeJobWaiting:
+			stats.TotalWaiting++
+		}
+	}
+
+	// Identify problem periods
+	stats.TimeoutPeriods = findTimeoutPeriods(events)
+	stats.HighPressurePeriods = findHighPressurePeriods(timePoints, maxLeases)
+
+	return stats
+}
+
+func findTimeoutPeriods(events []simulation.Event) []TimePeriod {
+	periods := []TimePeriod{}
+	var currentPeriod *TimePeriod
+
+	for _, event := range events {
+		if event.Type == simulation.EventTypeJobTimeout {
+			if currentPeriod == nil {
+				currentPeriod = &TimePeriod{
+					Start: event.Time,
+					End:   event.Time,
+					Count: 1,
+				}
+			} else if event.Time.Sub(currentPeriod.End) < 1*time.Hour {
+				// Extend current period
+				currentPeriod.End = event.Time
+				currentPeriod.Count++
+			} else {
+				// Start new period
+				periods = append(periods, *currentPeriod)
+				currentPeriod = &TimePeriod{
+					Start: event.Time,
+					End:   event.Time,
+					Count: 1,
+				}
+			}
+		}
+	}
+
+	if currentPeriod != nil {
+		periods = append(periods, *currentPeriod)
+	}
+
+	return periods
+}
+
+func findHighPressurePeriods(timePoints []simulation.TimePoint, maxLeases int) []TimePeriod {
+	periods := []TimePeriod{}
+	var currentPeriod *TimePeriod
+	threshold := float64(maxLeases) * 0.90 // 90% utilization
+
+	for _, tp := range timePoints {
+		if float64(tp.ActiveLeases) >= threshold || tp.WaitingJobs > 0 {
+			if currentPeriod == nil {
+				currentPeriod = &TimePeriod{
+					Start: tp.Time,
+					End:   tp.Time,
+					Count: 1,
+				}
+			} else if tp.Time.Sub(currentPeriod.End) < 30*time.Minute {
+				currentPeriod.End = tp.Time
+				currentPeriod.Count++
+			} else {
+				periods = append(periods, *currentPeriod)
+				currentPeriod = &TimePeriod{
+					Start: tp.Time,
+					End:   tp.Time,
+					Count: 1,
+				}
+			}
+		}
+	}
+
+	if currentPeriod != nil {
+		periods = append(periods, *currentPeriod)
+	}
+
+	return periods
+}
+
+func generateExecutiveSummary(stats SimulationStats, start, end time.Time) string {
+	var sb strings.Builder
+
+	duration := end.Sub(start)
+
+	sb.WriteString("EXECUTIVE SUMMARY\n")
+	sb.WriteString(strings.Repeat("-", 100))
+	sb.WriteString("\n\n")
+
+	sb.WriteString(fmt.Sprintf("Simulation Period: %s to %s (%.0f hours)\n\n",
+		start.Format("2006-01-02 15:04"),
+		end.Format("2006-01-02 15:04"),
+		duration.Hours()))
+
+	sb.WriteString("Lease Utilization:\n")
+	sb.WriteString(fmt.Sprintf("  • Average Usage:    %.1f leases (%.1f%% utilization)\n",
+		stats.AvgLeaseUsage, stats.UtilizationPct))
+	sb.WriteString(fmt.Sprintf("  • Peak Usage:       %d leases (%.1f%% utilization)\n",
+		stats.PeakLeaseUsage, stats.PeakUtilization))
+	sb.WriteString("\n")
+
+	// Status indicator
+	status := "✓ HEALTHY"
+	if stats.TotalTimeouts > 0 {
+		status = "✗ CRITICAL - Timeouts detected"
+	} else if stats.MaxWaiting > 0 {
+		status = "⚠ WARNING - Jobs waiting for leases"
+	} else if stats.PeakUtilization > 90 {
+		status = "⚠ WARNING - High utilization (>90%)"
+	}
+
+	sb.WriteString(fmt.Sprintf("Status: %s\n\n", status))
+
+	sb.WriteString("Problem Summary:\n")
+	sb.WriteString(fmt.Sprintf("  • Job Timeouts:     %d\n", stats.TotalTimeouts))
+	sb.WriteString(fmt.Sprintf("  • Jobs Waiting:     %d events\n", stats.TotalWaiting))
+	sb.WriteString(fmt.Sprintf("  • Max Queue Depth:  %d concurrent waiting jobs\n", stats.MaxWaiting))
+
+	if len(stats.TimeoutPeriods) > 0 {
+		sb.WriteString(fmt.Sprintf("  • Timeout Periods:  %d distinct periods\n", len(stats.TimeoutPeriods)))
+	}
+	if len(stats.HighPressurePeriods) > 0 {
+		sb.WriteString(fmt.Sprintf("  • High Pressure:    %d periods with >90%% utilization\n", len(stats.HighPressurePeriods)))
+	}
+
+	sb.WriteString("\n\n")
+
+	return sb.String()
+}
+
+func generateProblemTimeline(events []simulation.Event) string {
+	var sb strings.Builder
+
+	sb.WriteString("PROBLEM TIMELINE\n")
+	sb.WriteString(strings.Repeat("-", 100))
+	sb.WriteString("\n\n")
+
+	// Extract problem events
+	problems := []simulation.Event{}
+	for _, event := range events {
+		if event.Type == simulation.EventTypeJobTimeout ||
+			event.Type == simulation.EventTypeJobWaiting ||
+			event.Type == simulation.EventTypeMaxExceeded {
+			problems = append(problems, event)
+		}
+	}
+
+	if len(problems) == 0 {
+		sb.WriteString("✓ No timeouts, queue waits, or capacity issues detected!\n\n")
+		return sb.String()
+	}
+
+	// Show first 50 problems
+	displayCount := len(problems)
+	if displayCount > 50 {
+		displayCount = 50
+	}
+
+	sb.WriteString(fmt.Sprintf("%-20s %-10s %-12s %s\n", "Timestamp", "Type", "Active/Max", "Details"))
+	sb.WriteString(strings.Repeat("-", 100))
+	sb.WriteString("\n")
+
+	for i := 0; i < displayCount; i++ {
+		event := problems[i]
+
+		typeStr := ""
+		switch event.Type {
+		case simulation.EventTypeJobTimeout:
+			typeStr = "TIMEOUT"
+		case simulation.EventTypeJobWaiting:
+			typeStr = "WAITING"
+		case simulation.EventTypeMaxExceeded:
+			typeStr = "EXCEEDED"
+		}
+
+		sb.WriteString(fmt.Sprintf("%-20s %-10s %-12s %s\n",
+			event.Time.Format("2006-01-02 15:04:05"),
+			typeStr,
+			fmt.Sprintf("%d", event.ActiveLeases),
+			truncateString(event.Message, 60)))
+	}
+
+	if len(problems) > displayCount {
+		sb.WriteString(fmt.Sprintf("\n... and %d more problem events (see detailed timeline for all)\n", len(problems)-displayCount))
+	}
+
+	sb.WriteString("\n\n")
+
+	return sb.String()
+}
+
+func generateHourlyBreakdown(timePoints []simulation.TimePoint, events []simulation.Event, maxLeases int, start time.Time) string {
+	var sb strings.Builder
+
+	sb.WriteString("HOURLY STATISTICS\n")
+	sb.WriteString(strings.Repeat("-", 100))
+	sb.WriteString("\n\n")
+
+	if len(timePoints) == 0 {
+		sb.WriteString("No data available\n\n")
+		return sb.String()
+	}
+
+	// Find max hour
+	lastPoint := timePoints[len(timePoints)-1]
+	maxHour := int(lastPoint.Time.Sub(start).Hours()) + 1
+
+	// Aggregate by hour
+	type HourStats struct {
+		avgUtil  float64
+		peakUtil int
+		timeouts int
+		waiting  int
+		samples  int
+	}
+
+	hourStats := make([]HourStats, maxHour)
+
+	// Process time points
+	for _, tp := range timePoints {
+		hour := int(tp.Time.Sub(start).Hours())
+		if hour >= 0 && hour < maxHour {
+			hourStats[hour].avgUtil += float64(tp.ActiveLeases)
+			if tp.ActiveLeases > hourStats[hour].peakUtil {
+				hourStats[hour].peakUtil = tp.ActiveLeases
+			}
+			hourStats[hour].samples++
+		}
+	}
+
+	// Process events
+	for _, event := range events {
+		hour := int(event.Time.Sub(start).Hours())
+		if hour >= 0 && hour < maxHour {
+			if event.Type == simulation.EventTypeJobTimeout {
+				hourStats[hour].timeouts++
+			} else if event.Type == simulation.EventTypeJobWaiting {
+				hourStats[hour].waiting++
+			}
+		}
+	}
+
+	// Calculate averages
+	for i := range hourStats {
+		if hourStats[i].samples > 0 {
+			hourStats[i].avgUtil /= float64(hourStats[i].samples)
+		}
+	}
+
+	// Print table
+	sb.WriteString(fmt.Sprintf("%-12s %-15s %-15s %-12s %-12s\n",
+		"Time Range", "Avg Util %", "Peak Util %", "Timeouts", "Waiting"))
+	sb.WriteString(strings.Repeat("-", 100))
+	sb.WriteString("\n")
+
+	for hour, stats := range hourStats {
+		if stats.samples == 0 {
+			continue
+		}
+
+		day := hour / 24
+		hourOfDay := hour % 24
+
+		avgPct := (stats.avgUtil / float64(maxLeases)) * 100
+		peakPct := (float64(stats.peakUtil) / float64(maxLeases)) * 100
+
+		timeRange := fmt.Sprintf("D%d %02d:00", day, hourOfDay)
+
+		sb.WriteString(fmt.Sprintf("%-12s %-15s %-15s %-12d %-12d\n",
+			timeRange,
+			fmt.Sprintf("%.1f%%", avgPct),
+			fmt.Sprintf("%.1f%%", peakPct),
+			stats.timeouts,
+			stats.waiting))
+	}
+
+	sb.WriteString("\n\n")
+
+	return sb.String()
+}
+
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
 }
 
 // GenerateEventSummary generates a summary of events
 func (g *Generator) GenerateEventSummary(events []simulation.Event) string {
 	var sb strings.Builder
+	sb.Grow(500) // Small summary, pre-allocate modest buffer
 
 	sb.WriteString("\n")
 	sb.WriteString("Event Summary\n")
@@ -236,6 +422,8 @@ func (g *Generator) GenerateEventSummary(events []simulation.Event) string {
 // GenerateWarnings generates a list of warnings
 func (g *Generator) GenerateWarnings(warnings []simulation.Event) string {
 	var sb strings.Builder
+	// Estimate: ~100 chars per warning + header
+	sb.Grow(len(warnings)*100 + 200)
 
 	sb.WriteString("\n")
 	sb.WriteString("Warnings\n")
@@ -262,6 +450,12 @@ func (g *Generator) GenerateWarnings(warnings []simulation.Event) string {
 // GenerateDetailedTimeline generates a detailed timeline of events
 func (g *Generator) GenerateDetailedTimeline(events []simulation.Event, limit int) string {
 	var sb strings.Builder
+	displayCount := len(events)
+	if limit > 0 && limit < displayCount {
+		displayCount = limit
+	}
+	// Estimate: ~100 chars per event line + header
+	sb.Grow(displayCount*100 + 200)
 
 	sb.WriteString("\n")
 	sb.WriteString("Detailed Timeline")
@@ -271,11 +465,6 @@ func (g *Generator) GenerateDetailedTimeline(events []simulation.Event, limit in
 	sb.WriteString("\n")
 	sb.WriteString(strings.Repeat("=", g.width))
 	sb.WriteString("\n\n")
-
-	displayCount := len(events)
-	if limit > 0 && limit < displayCount {
-		displayCount = limit
-	}
 
 	for i := 0; i < displayCount; i++ {
 		event := events[i]
@@ -309,15 +498,4 @@ func (g *Generator) GenerateDetailedTimeline(events []simulation.Event, limit in
 	sb.WriteString("\n")
 
 	return sb.String()
-}
-
-// FormatDuration formats a duration in a human-readable way
-func FormatDuration(d time.Duration) string {
-	if d < time.Minute {
-		return fmt.Sprintf("%ds", int(d.Seconds()))
-	}
-	if d < time.Hour {
-		return fmt.Sprintf("%dm", int(d.Minutes()))
-	}
-	return fmt.Sprintf("%dh%dm", int(d.Hours()), int(d.Minutes())%60)
 }

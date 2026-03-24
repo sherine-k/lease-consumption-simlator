@@ -19,12 +19,13 @@ const (
 
 // Event represents a point-in-time event in the simulation
 type Event struct {
-	Time         time.Time
-	Type         EventType
-	JobInstance  *config.JobInstance
-	ActiveLeases int
-	Message      string
-	IsWarning    bool
+	Time           time.Time
+	Type           EventType
+	JobInstance    *config.JobInstance
+	ActiveLeases   int
+	Message        string
+	IsWarning      bool
+	WasWaiting     bool // True if this event relates to a job that was waiting for a lease
 }
 
 // TimePoint represents the state at a specific point in time
