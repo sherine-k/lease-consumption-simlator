@@ -2,27 +2,11 @@ package config
 
 import (
 	"fmt"
-	"math/rand"
 	"os"
 	"time"
 
 	"gopkg.in/yaml.v3"
 )
-
-// CalculateGaussianDuration calculates a duration from a Gaussian (normal) distribution
-// given a mean duration and standard deviation. Ensures the result is always positive.
-func CalculateGaussianDuration(rng *rand.Rand, meanDuration, stdDev time.Duration) time.Duration {
-	// Generate duration from normal distribution: mean + stddev * N(0,1)
-	gaussianValue := rng.NormFloat64()
-	durationSeconds := meanDuration.Seconds() + (stdDev.Seconds() * gaussianValue)
-
-	// Ensure duration is positive (use 10% of mean as minimum)
-	if durationSeconds < 0 {
-		durationSeconds = meanDuration.Seconds() * 0.1
-	}
-
-	return time.Duration(durationSeconds * float64(time.Second))
-}
 
 // LoadConfig loads and parses the configuration file
 func LoadConfig(filename string) (*Config, error) {
@@ -36,50 +20,12 @@ func LoadConfig(filename string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
-	// Handle alternate field name for jobDurationStdDev -> jobDurationStandardDeviation
-	var rawConfig map[string]interface{}
-	if err := yaml.Unmarshal(data, &rawConfig); err == nil {
-		if stdDev, ok := rawConfig["jobDurationStdDev"]; ok && config.JobDurationStandardDeviation == 0 {
-			// Parse the duration from the alternate field name
-			if stdDevStr, ok := stdDev.(string); ok {
-				if duration, err := time.ParseDuration(stdDevStr); err == nil {
-					config.JobDurationStandardDeviation = duration
-				}
-			}
-		}
-	}
+	// Set default release intervals if not specified
+	setDefaultReleaseIntervalsIfEmpty(&config)
 
-	// Detect if using template-based format
-	isTemplateFormat := config.DevVersions > 0 || config.SupportedVersions > 0 || config.EusVersions > 0
-
-	if isTemplateFormat {
-		// Expand job templates into full job instances
-		if err := expandJobTemplates(&config); err != nil {
-			return nil, fmt.Errorf("failed to expand job templates: %w", err)
-		}
-	}
-
-	// Calculate job durations from Gaussian distribution
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-	for i := range config.Jobs {
-		job := &config.Jobs[i]
-
-		// Determine which mean/stddev to use
-		meanDuration := job.MeanDuration
-		stdDev := job.StdDev
-
-		// For template-based configs, use global values if job-specific not set
-		if isTemplateFormat && meanDuration == 0 {
-			meanDuration = config.MeanDuration
-			stdDev = config.JobDurationStandardDeviation
-		}
-
-		job.Duration = CalculateGaussianDuration(rng, meanDuration, stdDev)
-
-		// Set IsReleaseController flag based on TriggerType for non-template configs
-		if !isTemplateFormat && job.TriggerType == TriggerTypeReleaseController {
-			job.IsReleaseController = true
-		}
+	// Expand job templates into full job instances
+	if err := expandJobTemplates(&config); err != nil {
+		return nil, fmt.Errorf("failed to expand job templates: %w", err)
 	}
 
 	// Validate configuration
@@ -88,6 +34,33 @@ func LoadConfig(filename string) (*Config, error) {
 	}
 
 	return &config, nil
+}
+
+// setDefaultReleaseIntervalsIfEmpty sets default release interval values if not specified
+func setDefaultReleaseIntervalsIfEmpty(config *Config) {
+	// Dev defaults: mean=6h, stddev=2h (Gaussian distribution centered at 6h with variation)
+	if config.DevReleaseIntervalMean == 0 {
+		config.DevReleaseIntervalMean = 6 * time.Hour
+	}
+	if config.DevReleaseIntervalStdDev == 0 {
+		config.DevReleaseIntervalStdDev = 2 * time.Hour
+	}
+
+	// Supported defaults: mean=8h, stddev=4h
+	if config.SupportedReleaseIntervalMean == 0 {
+		config.SupportedReleaseIntervalMean = 8 * time.Hour
+	}
+	if config.SupportedReleaseIntervalStdDev == 0 {
+		config.SupportedReleaseIntervalStdDev = 4 * time.Hour
+	}
+
+	// EUS defaults: mean=24h, stddev=8h
+	if config.EusReleaseIntervalMean == 0 {
+		config.EusReleaseIntervalMean = 24 * time.Hour
+	}
+	if config.EusReleaseIntervalStdDev == 0 {
+		config.EusReleaseIntervalStdDev = 8 * time.Hour
+	}
 }
 
 // expandJobTemplates expands job templates into full job instances
@@ -102,13 +75,13 @@ func expandJobTemplates(config *Config) error {
 
 	// Calculate total number of jobs to distribute evenly across the day
 	totalVersions := config.DevVersions + config.SupportedVersions + config.EusVersions
-	totalJobs := len(jobTemplates) * totalVersions
+	totalCronJobs := len(jobTemplates) * totalVersions
 
 	// Spread jobs evenly across 24 hours using minutes for finer granularity
 	minutesPerDay := 24 * 60
-	minutesBetweenJobs := minutesPerDay / totalJobs
-	if minutesBetweenJobs < 1 {
-		minutesBetweenJobs = 1 // Minimum 1 minute spacing
+	minutesBetweenCronJobs := minutesPerDay / totalCronJobs
+	if minutesBetweenCronJobs < 1 {
+		minutesBetweenCronJobs = 1 // Minimum 1 minute spacing
 	}
 
 	// Global job counter for staggering
@@ -116,23 +89,20 @@ func expandJobTemplates(config *Config) error {
 
 	// Expand each template across all versions
 	for _, template := range jobTemplates {
-		versionIndex := 0
 
 		// Expand for dev versions
 		for i := 0; i < config.DevVersions; i++ {
-			versionIndex++
-			minuteOfDay := (globalJobIndex * minutesBetweenJobs) % minutesPerDay
+			minuteOfDay := (globalJobIndex * minutesBetweenCronJobs) % minutesPerDay
 			cronHour := minuteOfDay / 60
 			cronMinute := minuteOfDay % 60
-			job := expandJobTemplate(template, "dev", versionIndex, cronHour, cronMinute, VersionCategoryDev)
+			job := expandJobTemplate(template, "dev", i+1, cronHour, cronMinute, VersionCategoryDev)
 			config.Jobs = append(config.Jobs, job)
 			globalJobIndex++
 		}
 
 		// Expand for supported versions
 		for i := 0; i < config.SupportedVersions; i++ {
-			versionIndex++
-			minuteOfDay := (globalJobIndex * minutesBetweenJobs) % minutesPerDay
+			minuteOfDay := (globalJobIndex * minutesBetweenCronJobs) % minutesPerDay
 			cronHour := minuteOfDay / 60
 			cronMinute := minuteOfDay % 60
 			job := expandJobTemplate(template, "supported", i+1, cronHour, cronMinute, VersionCategorySupported)
@@ -142,8 +112,7 @@ func expandJobTemplates(config *Config) error {
 
 		// Expand for EUS versions
 		for i := 0; i < config.EusVersions; i++ {
-			versionIndex++
-			minuteOfDay := (globalJobIndex * minutesBetweenJobs) % minutesPerDay
+			minuteOfDay := (globalJobIndex * minutesBetweenCronJobs) % minutesPerDay
 			cronHour := minuteOfDay / 60
 			cronMinute := minuteOfDay % 60
 			job := expandJobTemplate(template, "eus", i+1, cronHour, cronMinute, VersionCategoryEus)
@@ -182,7 +151,6 @@ func expandJobTemplate(template Job, versionType string, versionNum int, cronHou
 
 	if shouldTriggerOnRC {
 		job.TriggerType = TriggerTypeReleaseController
-		job.IsReleaseController = true
 		job.OnReleaseController = template.OnReleaseController
 	}
 
@@ -222,6 +190,28 @@ func validateConfig(config *Config) error {
 		if config.JobDurationStandardDeviation < 0 {
 			return fmt.Errorf("jobDurationStandardDeviation must be greater than or equal to 0")
 		}
+
+		// Validate release intervals (Gaussian distribution parameters)
+		if config.DevReleaseIntervalMean < 0 {
+			return fmt.Errorf("devReleaseIntervalMean must be greater than or equal to 0")
+		}
+		if config.DevReleaseIntervalStdDev < 0 {
+			return fmt.Errorf("devReleaseIntervalStdDev must be greater than or equal to 0")
+		}
+
+		if config.SupportedReleaseIntervalMean < 0 {
+			return fmt.Errorf("supportedReleaseIntervalMean must be greater than or equal to 0")
+		}
+		if config.SupportedReleaseIntervalStdDev < 0 {
+			return fmt.Errorf("supportedReleaseIntervalStdDev must be greater than or equal to 0")
+		}
+
+		if config.EusReleaseIntervalMean < 0 {
+			return fmt.Errorf("eusReleaseIntervalMean must be greater than or equal to 0")
+		}
+		if config.EusReleaseIntervalStdDev < 0 {
+			return fmt.Errorf("eusReleaseIntervalStdDev must be greater than or equal to 0")
+		}
 	}
 
 	for i, job := range config.Jobs {
@@ -229,24 +219,6 @@ func validateConfig(config *Config) error {
 			return fmt.Errorf("job %d: name is required", i)
 		}
 
-		// For non-template format, validate job-specific fields
-		if !isTemplateFormat {
-			if job.MeanDuration <= 0 {
-				return fmt.Errorf("job %s: meanDuration must be greater than 0", job.Name)
-			}
-
-			if job.StdDev < 0 {
-				return fmt.Errorf("job %s: stdDev must be greater than or equal to 0", job.Name)
-			}
-
-			if job.TriggerType != TriggerTypeCron && job.TriggerType != TriggerTypeReleaseController {
-				return fmt.Errorf("job %s: triggerType must be either 'cron' or 'release-controller'", job.Name)
-			}
-
-			if job.TriggerType == TriggerTypeCron && job.CronSchedule == "" {
-				return fmt.Errorf("job %s: cronSchedule is required for cron-type jobs", job.Name)
-			}
-		}
 	}
 
 	return nil

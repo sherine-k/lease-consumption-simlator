@@ -63,7 +63,10 @@ go build -o leases .
 - `events.go`: Event types (`lease-acquired`, `lease-released`, `job-waiting`, `job-timeout`, `max-exceeded`) and time point tracking
 
 **pkg/chart/**
-- `chart.go`: ASCII chart generation, event summaries, warnings, and timeline output
+- `chart.go`:  **Visualization** with 3 main sections:
+  1. Executive Summary with health status (OK/WARNING/CRITICAL)
+  2. Hourly Statistics breakdown (avg/peak/waiting jobs per hour)
+  3. Problem Timeline (timeouts and waits only - focuses on issues)
 
 **cmd/**
 - `root.go`: Cobra CLI implementation with flags for timeline display, event limits, summary control, and output file path. Displays lease chart to console and writes complete report to file.
@@ -95,10 +98,9 @@ All events are recorded with timestamps, active lease counts, and descriptive me
 
 ### Configuration Structure
 
-The simulator supports two configuration formats:
+The simulator uses a **template-based configuration format** for OpenShift CI scenarios testing multiple versions:
 
-#### Template-Based Format (Primary)
-Used for OpenShift CI scenarios with multiple versions:
+#### Core Configuration Fields
 - `maxActiveLeases`: Total concurrent lease limit
 - `jobTimeoutDuration`: Max execution time before job timeout warning
 - `leaseWaitTimeout`: Max wait time before lease acquisition timeout warning
@@ -106,17 +108,24 @@ Used for OpenShift CI scenarios with multiple versions:
 - `devVersions`, `supportedVersions`, `eusVersions`: Number of each version type to simulate
 - `devLeaseBuffer`: Number of leases reserved for developer testing sessions
 - `meanDuration`: Global average job duration (Gaussian distribution mean)
-- `jobDurationStdDev` (or `jobDurationStandardDeviation`): Global standard deviation for duration variation
+- `jobDurationStdDev`: Global standard deviation for duration variation
 
-Jobs are templates with:
-- `name`: Job scenario name (expanded to multiple versions)
-- `onReleaseController`: If true, triggers on both cron schedule AND release events
+#### Quantity of OCP releases being tested by category
+Controls how many active versions of OCP are being tested by the simulation: 
+- `devVersions`: Number of releases under development being tested
+- `supportedVersions`: Number of releases in full suported being tested
+- `eusVersions`: Number of releases in Extended support being tested
 
-#### Individual Job Format (Legacy)
-For custom scheduling scenarios:
-- Jobs require: `name`, `meanDuration`, `stdDev`, `triggerType` (`cron` or `release-controller`)
-- Cron jobs need: `cronSchedule` (5-field cron expression)
-- Release controller jobs: Set `isReleaseController: true` (automatically set during parsing)
+#### Release Interval Configuration (Optional)
+Control how frequently release controller events are simulated per version category using Gaussian distribution:
+- `devReleaseIntervalMean`, `devReleaseIntervalStdDev`: Dev version release frequency (default: mean=6h, stddev=2h)
+- `supportedReleaseIntervalMean`, `supportedReleaseIntervalStdDev`: Supported version release frequency (default: mean=8h, stddev=4h)
+- `eusReleaseIntervalMean`, `eusReleaseIntervalStdDev`: EUS version release frequency (default: mean=24h, stddev=8h)
+
+#### Job Templates
+Jobs are templates that get expanded to multiple versions:
+- `name`: Job scenario name (expanded to `scenario-version-X` for each version)
+- `onReleaseController`: Array of version categories (`[dev]`, `[supported]`, `[dev, supported]`, etc.) where this job triggers on release events in addition to cron schedule
 
 ### Cron Job Instance Generation
 
@@ -124,14 +133,14 @@ Uses `github.com/robfig/cron/v3` parser with all fields enabled (Minute|Hour|Dom
 
 ### Release Controller Job Generation
 
-Release controller jobs are simulated with random intervals that vary by version category:
-- **Dev versions**: 4-8 hours between releases (frequent development builds)
-- **Supported versions**: 4-24 hours between releases (regular updates)
-- **EUS versions**: 4 hours to 2 days between releases (infrequent updates)
+Release controller jobs are simulated with Gaussian-distributed intervals that vary by version category (configurable):
+- **Dev versions**: Default mean=6h, stddev=2h (frequent development builds)
+- **Supported versions**: Default mean=8h, stddev=4h (regular updates)
+- **EUS versions**: Default mean=24h, stddev=8h (infrequent updates)
 
-Jobs are grouped by version, and each version has independent release events. In template-based configs, jobs with `onReleaseController: true` trigger on BOTH:
+Each interval between releases is calculated using Gaussian distribution with the configured mean and standard deviation. Jobs are grouped by version, and each version has independent release events. Jobs with `onReleaseController` specified trigger on BOTH:
 1. Daily cron schedule (auto-staggered across 24 hours)
-2. Simulated release events (random intervals based on version category)
+2. Simulated release events (Gaussian-distributed intervals based on version category configuration)
 
 ### Developer Session Generation
 
@@ -141,22 +150,65 @@ When `devLeaseBuffer` > 0, the simulator generates synthetic developer testing s
 - Duration follows same Gaussian distribution as regular jobs
 - Simulates ad-hoc developer usage that competes with CI jobs for leases
 
+### Job Duration Calculation
+
+Job durations are calculated **per-instance** using Gaussian (normal) distribution:
+- Each job instance gets a unique duration when generated in the simulator
+- Uses `simulation.CalculateGaussianDuration(meanDuration, stdDev)` helper function
+- Durations are clamped to minimum 10% of mean to avoid negative or zero values
+- Statistical distribution: ~68% within ±1σ, ~95% within ±2σ, ~99.7% within ±3σ
+- Expected behavior: ~4% of jobs naturally exceed mean+1.75σ threshold
+- Package-level RNG with `sync.Once` ensures thread-safe random generation
+
 ## Development Notes
 
 - Simulation starts at last Monday midnight (for consistent timeline display across runs)
 - Simulation runs in 5-minute time steps
-- Time points for charting sampled every 30 minutes
-- Job durations calculated using Gaussian distribution via `config.CalculateGaussianDuration()` helper
+- Time points for charting sampled every **15 minutes** (tracks peak active leases during interval)
+- Job durations calculated **per-instance** using Gaussian distribution in simulator (not parser)
 - Template-based configs auto-expand jobs across versions with staggered start times
 - Developer sessions generated randomly if `devLeaseBuffer` > 0 (targets 40% utilization)
-- No tests currently exist in codebase
 - Uses standard Go duration parsing for YAML fields (e.g., `72h`, `6h30m`, `5h15m`)
 
-### Recent Code Optimizations
+### Test Coverage
 
-The codebase has been optimized for maintainability:
-- Gaussian duration calculation extracted to shared helper function
-- String building uses `strings.Builder` for efficiency
-- `IsReleaseController` flag properly set during parsing (not validation)
-- TimePoints generation correctly tracks waiting jobs
-- Removed unused code and outdated comments
+**pkg/config/parser_test.go** (94.2% coverage)
+- `TestLoadConfig`: 17 test cases covering valid/invalid configs, template expansion, validation
+- `TestLoadConfigFileNotFound`: File I/O error handling
+- `TestExpandJobTemplates`: Job template expansion logic
+- `TestValidateConfig`: Configuration validation rules
+- `TestLoadConfigWithRealFiles`: Integration tests with actual config files
+
+**pkg/simulation/simulator_test.go**
+- `TestCalculateGaussianDuration`: Validates positive durations and minimum enforcement
+- `TestSimulatorBasicScheduling`: 2 jobs at different times, no timeouts expected
+- `TestSimulatorLeaseContention`: Insufficient capacity causes waiting events
+- `TestSimulatorLeaseWaitTimeout`: 1 lease + 3 concurrent jobs → wait timeouts detected
+- `TestSimulatorDurationCalculation`: Verifies per-instance duration variation (7 daily runs show different durations)
+
+### Critical Bug Fixes and Optimizations
+
+**Duration Calculation (per-instance)**
+- Moved from parser to simulator: `calculateInstanceDuration()` called for each job instance
+- Fixed RNG to be package-level singleton with `sync.Once` for proper randomization
+- Each instance now gets unique duration from Gaussian distribution
+
+**Time Point Generation (peak tracking)**
+- Fixed to track **peak** active leases during 15-minute sampling interval
+- Previous bug: used final value (often 0 after job completion) instead of peak
+- Impact: Chart now accurately shows utilization spikes
+
+**Timeout Detection**
+- Fixed execution timeout: Calculate `expectedDuration = job.EndTime.Sub(job.StartTime)` instead of using zero `job.Job.Duration`
+- Fixed lease wait timeout: Use `WasWaiting` flag to distinguish from execution timeout
+- Fixed job EndTime recalculation when jobs wait for leases: preserve original duration
+
+**Lease Assignment**
+- Fixed `assignLeaseToWaitingJob()` to preserve original job duration when lease becomes available
+- Ensures jobs run for full expected time even if they had to wait
+
+**Visualization**
+- New improved visualization focuses on problems (timeouts, waits) rather than just showing all events
+- Executive summary provides health status at a glance
+- Hourly heatmap uses visual bars to show average and peak usage patterns
+- Problem timeline shows only timeout and wait events for easier troubleshooting

@@ -1,0 +1,17 @@
+# Example configuration showing Gaussian distribution for job durations
+
+maxActiveLeases: 12
+jobTimeoutDuration: 5h15m
+leaseWaitTimeout: 5h
+simulationDuration: 168h
+meanDuration: 5h
+jobDurationStdDev: 30m
+devVersions: 1
+supportedVersions: 1
+eusVersions: 1 
+devLeaseBuffer: 1
+jobs:
+  - name: "ocp-4.19-upgrade-ovn-remote-libvirt-multi-p-p"
+
+  - name: "ocp-4.20-fips-ovn-remote-libvirt-multi-p-p"
+    onReleaseController: [dev, supported, eus]

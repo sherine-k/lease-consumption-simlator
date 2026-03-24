@@ -1,0 +1,15 @@
+maxActiveLeases: 4 
+jobTimeoutDuration: 5h15m
+leaseWaitTimeout: 5h
+simulationDuration: 24h
+devVersions: 1
+supportedVersions: 0
+eusVersions: 0
+devLeaseBuffer: 0
+meanDuration: 3h30m
+jobDurationStdDev: 1h
+jobs:
+  - name: e2e-conformance
+    onReleaseController: [dev]
+  - name: e2e-upgrade
+    onReleaseController: [dev]

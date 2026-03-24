@@ -73,24 +73,25 @@ func runSimulation(cmd *cobra.Command, args []string) error {
 	timePoints := sim.GetTimePoints()
 	events := sim.GetEvents()
 	warnings := sim.GetWarnings()
-
-	leaseChart := chartGen.GenerateLeaseChart(timePoints, events, cfg.MaxActiveLeases)
-
-	// Display lease chart to console
-	fmt.Println(leaseChart)
+	simStart := sim.GetSimulationStart()
+	simEnd := sim.GetSimulationEnd()
 
 	// Build complete output for file
 	var fileContent strings.Builder
 	fileContent.WriteString(configSummary)
-	fileContent.WriteString(leaseChart)
 
-	if showEventSummary {
-		eventSummary := chartGen.GenerateEventSummary(events)
-		fileContent.WriteString(eventSummary)
+	// Use new improved visualization
+	improvedReport := chartGen.GenerateImprovedReport(timePoints, events, cfg.MaxActiveLeases, simStart, simEnd)
+	fileContent.WriteString(improvedReport)
+
+	// Display summary to console
+	fmt.Println(improvedReport)
+
+	// Add old warnings section if there are warnings
+	if len(warnings) > 0 {
+		warningsOutput := chartGen.GenerateWarnings(warnings)
+		fileContent.WriteString(warningsOutput)
 	}
-
-	warningsOutput := chartGen.GenerateWarnings(warnings)
-	fileContent.WriteString(warningsOutput)
 
 	if showTimeline {
 		timeline := chartGen.GenerateDetailedTimeline(events, timelineLimit)
