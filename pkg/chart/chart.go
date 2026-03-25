@@ -55,15 +55,16 @@ func (g *Generator) GenerateImprovedReport(timePoints []simulation.TimePoint, ev
 
 // SimulationStats holds calculated statistics
 type SimulationStats struct {
-	AvgLeaseUsage       float64
-	PeakLeaseUsage      int
-	UtilizationPct      float64
-	TotalTimeouts       int
-	TotalWaiting        int
-	MaxWaiting          int
-	PeakUtilization     float64
-	TimeoutPeriods      []TimePeriod
-	HighPressurePeriods []TimePeriod
+	AvgLeaseUsage        float64
+	PeakLeaseUsage       int
+	UtilizationPct       float64
+	ExecutionTimeouts    int  // Jobs that ran too long
+	LeaseWaitTimeouts    int  // Jobs that waited too long for a lease
+	TotalWaiting         int
+	MaxWaiting           int
+	PeakUtilization      float64
+	TimeoutPeriods       []TimePeriod
+	HighPressurePeriods  []TimePeriod
 }
 
 // TimePeriod represents a time range
@@ -102,7 +103,9 @@ func calculateStatistics(timePoints []simulation.TimePoint, events []simulation.
 	for _, event := range events {
 		switch event.Type {
 		case simulation.EventTypeJobTimeout:
-			stats.TotalTimeouts++
+			stats.ExecutionTimeouts++
+		case simulation.EventTypeLeaseWaitTimeout:
+			stats.LeaseWaitTimeouts++
 		case simulation.EventTypeJobWaiting:
 			stats.TotalWaiting++
 		}
@@ -120,7 +123,7 @@ func findTimeoutPeriods(events []simulation.Event) []TimePeriod {
 	var currentPeriod *TimePeriod
 
 	for _, event := range events {
-		if event.Type == simulation.EventTypeJobTimeout {
+		if event.Type == simulation.EventTypeJobTimeout || event.Type == simulation.EventTypeLeaseWaitTimeout {
 			if currentPeriod == nil {
 				currentPeriod = &TimePeriod{
 					Start: event.Time,
@@ -207,7 +210,7 @@ func generateExecutiveSummary(stats SimulationStats, start, end time.Time) strin
 
 	// Status indicator
 	status := "✓ HEALTHY"
-	if stats.TotalTimeouts > 0 {
+	if stats.ExecutionTimeouts > 0 || stats.LeaseWaitTimeouts > 0 {
 		status = "✗ CRITICAL - Timeouts detected"
 	} else if stats.MaxWaiting > 0 {
 		status = "⚠ WARNING - Jobs waiting for leases"
@@ -218,9 +221,10 @@ func generateExecutiveSummary(stats SimulationStats, start, end time.Time) strin
 	sb.WriteString(fmt.Sprintf("Status: %s\n\n", status))
 
 	sb.WriteString("Problem Summary:\n")
-	sb.WriteString(fmt.Sprintf("  • Job Timeouts:     %d\n", stats.TotalTimeouts))
-	sb.WriteString(fmt.Sprintf("  • Jobs Waiting:     %d events\n", stats.TotalWaiting))
-	sb.WriteString(fmt.Sprintf("  • Max Queue Depth:  %d concurrent waiting jobs\n", stats.MaxWaiting))
+	sb.WriteString(fmt.Sprintf("  • Execution Timeouts:     %d (jobs ran too long)\n", stats.ExecutionTimeouts))
+	sb.WriteString(fmt.Sprintf("  • Lease Wait Timeouts:    %d (waited too long for lease)\n", stats.LeaseWaitTimeouts))
+	sb.WriteString(fmt.Sprintf("  • Jobs Waiting:           %d events\n", stats.TotalWaiting))
+	sb.WriteString(fmt.Sprintf("  • Max Queue Depth:        %d concurrent waiting jobs\n", stats.MaxWaiting))
 
 	if len(stats.TimeoutPeriods) > 0 {
 		sb.WriteString(fmt.Sprintf("  • Timeout Periods:  %d distinct periods\n", len(stats.TimeoutPeriods)))
@@ -245,6 +249,7 @@ func generateProblemTimeline(events []simulation.Event) string {
 	problems := []simulation.Event{}
 	for _, event := range events {
 		if event.Type == simulation.EventTypeJobTimeout ||
+			event.Type == simulation.EventTypeLeaseWaitTimeout ||
 			event.Type == simulation.EventTypeJobWaiting ||
 			event.Type == simulation.EventTypeMaxExceeded {
 			problems = append(problems, event)
@@ -272,7 +277,9 @@ func generateProblemTimeline(events []simulation.Event) string {
 		typeStr := ""
 		switch event.Type {
 		case simulation.EventTypeJobTimeout:
-			typeStr = "TIMEOUT"
+			typeStr = "EXEC_TIMEOUT"
+		case simulation.EventTypeLeaseWaitTimeout:
+			typeStr = "WAIT_TIMEOUT"
 		case simulation.EventTypeJobWaiting:
 			typeStr = "WAITING"
 		case simulation.EventTypeMaxExceeded:
@@ -313,11 +320,12 @@ func generateHourlyBreakdown(timePoints []simulation.TimePoint, events []simulat
 
 	// Aggregate by hour
 	type HourStats struct {
-		avgUtil  float64
-		peakUtil int
-		timeouts int
-		waiting  int
-		samples  int
+		avgUtil        float64
+		peakUtil       int
+		execTimeouts   int
+		waitTimeouts   int
+		waiting        int
+		samples        int
 	}
 
 	hourStats := make([]HourStats, maxHour)
@@ -339,7 +347,9 @@ func generateHourlyBreakdown(timePoints []simulation.TimePoint, events []simulat
 		hour := int(event.Time.Sub(start).Hours())
 		if hour >= 0 && hour < maxHour {
 			if event.Type == simulation.EventTypeJobTimeout {
-				hourStats[hour].timeouts++
+				hourStats[hour].execTimeouts++
+			} else if event.Type == simulation.EventTypeLeaseWaitTimeout {
+				hourStats[hour].waitTimeouts++
 			} else if event.Type == simulation.EventTypeJobWaiting {
 				hourStats[hour].waiting++
 			}
@@ -354,8 +364,8 @@ func generateHourlyBreakdown(timePoints []simulation.TimePoint, events []simulat
 	}
 
 	// Print table
-	sb.WriteString(fmt.Sprintf("%-12s %-15s %-15s %-12s %-12s\n",
-		"Time Range", "Avg Util %", "Peak Util %", "Timeouts", "Waiting"))
+	sb.WriteString(fmt.Sprintf("%-12s %-15s %-15s %-12s %-12s %-12s\n",
+		"Time Range", "Avg Util %", "Peak Util %", "Exec T/O", "Wait T/O", "Waiting"))
 	sb.WriteString(strings.Repeat("-", 100))
 	sb.WriteString("\n")
 
@@ -372,11 +382,12 @@ func generateHourlyBreakdown(timePoints []simulation.TimePoint, events []simulat
 
 		timeRange := fmt.Sprintf("D%d %02d:00", day, hourOfDay)
 
-		sb.WriteString(fmt.Sprintf("%-12s %-15s %-15s %-12d %-12d\n",
+		sb.WriteString(fmt.Sprintf("%-12s %-15s %-15s %-12d %-12d %-12d\n",
 			timeRange,
 			fmt.Sprintf("%.1f%%", avgPct),
 			fmt.Sprintf("%.1f%%", peakPct),
-			stats.timeouts,
+			stats.execTimeouts,
+			stats.waitTimeouts,
 			stats.waiting))
 	}
 
@@ -412,7 +423,8 @@ func (g *Generator) GenerateEventSummary(events []simulation.Event) string {
 	sb.WriteString(fmt.Sprintf("  - Leases Acquired: %d\n", eventsByType[simulation.EventTypeLeaseAcquired]))
 	sb.WriteString(fmt.Sprintf("  - Leases Released: %d\n", eventsByType[simulation.EventTypeLeaseReleased]))
 	sb.WriteString(fmt.Sprintf("  - Jobs Waiting: %d\n", eventsByType[simulation.EventTypeJobWaiting]))
-	sb.WriteString(fmt.Sprintf("  - Job Timeouts: %d\n", eventsByType[simulation.EventTypeJobTimeout]))
+	sb.WriteString(fmt.Sprintf("  - Execution Timeouts: %d\n", eventsByType[simulation.EventTypeJobTimeout]))
+	sb.WriteString(fmt.Sprintf("  - Lease Wait Timeouts: %d\n", eventsByType[simulation.EventTypeLeaseWaitTimeout]))
 	sb.WriteString(fmt.Sprintf("  - Max Exceeded: %d\n", eventsByType[simulation.EventTypeMaxExceeded]))
 	sb.WriteString("\n")
 
@@ -479,7 +491,9 @@ func (g *Generator) GenerateDetailedTimeline(events []simulation.Event, limit in
 		case simulation.EventTypeJobWaiting:
 			typeIcon = "W"
 		case simulation.EventTypeJobTimeout:
-			typeIcon = "T"
+			typeIcon = "E"  // Execution timeout
+		case simulation.EventTypeLeaseWaitTimeout:
+			typeIcon = "T"  // Lease wait timeout
 		case simulation.EventTypeMaxExceeded:
 			typeIcon = "!"
 		}

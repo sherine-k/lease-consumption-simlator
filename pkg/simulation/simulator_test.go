@@ -149,7 +149,7 @@ func TestSimulatorBasicScheduling(t *testing.T) {
 	// Verify no timeouts occurred (capacity is sufficient for 2 jobs)
 	timeoutCount := 0
 	for _, event := range events {
-		if event.Type == EventTypeJobTimeout {
+		if event.Type == EventTypeJobTimeout || event.Type == EventTypeLeaseWaitTimeout {
 			timeoutCount++
 		}
 	}
@@ -320,14 +320,10 @@ func TestSimulatorLeaseWaitTimeout(t *testing.T) {
 		switch event.Type {
 		case EventTypeJobWaiting:
 			waitingCount++
+		case EventTypeLeaseWaitTimeout:
+			leaseWaitTimeoutCount++
 		case EventTypeJobTimeout:
-			// Distinguish between lease wait timeout and execution timeout
-			// Lease wait timeouts have WasWaiting=true
-			if event.WasWaiting {
-				leaseWaitTimeoutCount++
-			} else {
-				executionTimeoutCount++
-			}
+			executionTimeoutCount++
 		case EventTypeLeaseAcquired:
 			acquiredCount++
 		}
@@ -368,7 +364,7 @@ func TestSimulatorLeaseWaitTimeout(t *testing.T) {
 		if w.Type == EventTypeJobWaiting {
 			hasWaitingWarning = true
 		}
-		if w.Type == EventTypeJobTimeout {
+		if w.Type == EventTypeLeaseWaitTimeout || w.Type == EventTypeJobTimeout {
 			hasTimeoutWarning = true
 		}
 	}
