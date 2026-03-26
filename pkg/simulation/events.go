@@ -10,11 +10,12 @@ import (
 type EventType string
 
 const (
-	EventTypeLeaseAcquired EventType = "lease-acquired"
-	EventTypeLeaseReleased EventType = "lease-released"
-	EventTypeJobWaiting    EventType = "job-waiting"
-	EventTypeJobTimeout    EventType = "job-timeout"
-	EventTypeMaxExceeded   EventType = "max-exceeded"
+	EventTypeLeaseAcquired     EventType = "lease-acquired"
+	EventTypeLeaseReleased     EventType = "lease-released"
+	EventTypeJobWaiting        EventType = "job-waiting"
+	EventTypeJobTimeout        EventType = "job-timeout"         // Job execution itself exceeded timeout (true execution timeout)
+	EventTypeLeaseWaitTimeout  EventType = "lease-wait-timeout"  // Job timed out due to wait delay (either never got lease, or wait consumed time budget)
+	EventTypeMaxExceeded       EventType = "max-exceeded"
 )
 
 // Event represents a point-in-time event in the simulation

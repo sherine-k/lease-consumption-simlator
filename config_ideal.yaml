@@ -34,8 +34,8 @@ devReleaseIntervalMean: 6h
 devReleaseIntervalStdDev: 1h
 supportedReleaseIntervalMean: 12h
 supportedReleaseIntervalStdDev: 4h
-eusReleaseIntervalMean: 24h
-eusReleaseIntervalStdDev: 8h
+eusReleaseIntervalMean: 36h
+eusReleaseIntervalStdDev: 12h
 
 # CI jobs for each version of openshift, and which release controller categories they run on
 jobs:
@@ -50,14 +50,12 @@ jobs:
   - name: e2e-upgrade
     onReleaseController: [dev, supported, eus]
   - name: e2e-tech-preview-parallel
-    onReleaseController: [dev, supported]
+    onReleaseController: [dev]
   - name: e2e-tech-preview-serial
-    # No onReleaseController - cron only
+    onReleaseController: [dev]
   - name: e2e-image-ecosystem
     # No onReleaseController - cron only
   - name: e2e-jenkins
-    # No onReleaseController - cron only
-  - name: e2e-compact
     # No onReleaseController - cron only
   - name: e2e-agent
     # No onReleaseController - cron only

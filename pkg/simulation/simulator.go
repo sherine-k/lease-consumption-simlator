@@ -424,27 +424,44 @@ func (s *Simulator) simulateLeaseUsage(jobInstances []*config.JobInstance) {
 		}
 
 		// Check for job execution timeouts FIRST (before completions)
-		// Only timeout jobs whose Duration exceeds the timeout threshold
-		// (jobs that complete naturally before timeout should not timeout)
+		// Distinguish between:
+		// - EXEC_TIMEOUT: Job's execution itself exceeded the timeout budget
+		// - WAIT_TIMEOUT: Waiting consumed time budget, so normal execution couldn't complete
 		stillRunning := []*config.JobInstance{}
 		for _, job := range activeJobs {
-			// Only timeout if:
-			// 1. Job has started (ActualStartTime is set)
-			// 2. Difference between currentTime and (original) StartTime exceeds timeout threshold
-			// 3. Job hasn't already timed out
 			overallRuntime := currentTime.Sub(job.StartTime)
-			if overallRuntime > s.config.JobTimeoutDuration &&
-				!job.TimedOut {
+			executionTime := currentTime.Sub(job.ActualStartTime)
+			waitTime := job.ActualStartTime.Sub(job.StartTime)
+
+			if overallRuntime > s.config.JobTimeoutDuration && !job.TimedOut {
 				job.TimedOut = true
 				activeLeases--
-				s.addEvent(Event{
-					Time:         currentTime,
-					Type:         EventTypeJobTimeout,
-					JobInstance:  job,
-					ActiveLeases: activeLeases,
-					Message:      fmt.Sprintf("Job '%s' exceeded execution timeout (%s), expected duration was %s, but was %s and waited %s", job.Job.Name, s.config.JobTimeoutDuration, job.Duration, overallRuntime, currentTime.Sub(job.StartTime)),
-					IsWarning:    true,
-				})
+
+				// Determine if this is an execution timeout or wait timeout
+				// If execution time alone exceeds the timeout budget, it's an execution timeout
+				// Otherwise, the wait consumed the time budget (wait timeout)
+				if executionTime > s.config.JobTimeoutDuration {
+					// True execution timeout - job ran too long
+					s.addEvent(Event{
+						Time:         currentTime,
+						Type:         EventTypeJobTimeout,
+						JobInstance:  job,
+						ActiveLeases: activeLeases,
+						Message:      fmt.Sprintf("Job '%s' exceeded execution timeout (execution: %s, limit: %s, expected: %s)", job.Job.Name, executionTime, s.config.JobTimeoutDuration, job.Duration),
+						IsWarning:    true,
+					})
+				} else {
+					// Wait timeout - job didn't have enough time left after waiting
+					s.addEvent(Event{
+						Time:         currentTime,
+						Type:         EventTypeLeaseWaitTimeout,
+						JobInstance:  job,
+						ActiveLeases: activeLeases,
+						Message:      fmt.Sprintf("Job '%s' timed out due to wait delay (waited: %s, execution: %s, total: %s, limit: %s)", job.Job.Name, waitTime, executionTime, overallRuntime, s.config.JobTimeoutDuration),
+						IsWarning:    true,
+						WasWaiting:   true,
+					})
+				}
 
 				// Try to assign the released lease to a waiting job
 				if len(waitingJobs) > 0 {
@@ -485,7 +502,7 @@ func (s *Simulator) simulateLeaseUsage(jobInstances []*config.JobInstance) {
 		}
 		activeJobs = remainingJobs
 
-		// Check for waiting job timeouts
+		// Check for waiting job timeouts (jobs still in queue that never got a lease)
 		remainingWaitingJobs := []*config.JobInstance{}
 		for _, job := range waitingJobs {
 			job.LeaseWaitTime += 5 * time.Minute
@@ -498,10 +515,10 @@ func (s *Simulator) simulateLeaseUsage(jobInstances []*config.JobInstance) {
 
 				s.addEvent(Event{
 					Time:         currentTime,
-					Type:         EventTypeJobTimeout,
+					Type:         EventTypeLeaseWaitTimeout,
 					JobInstance:  job,
 					ActiveLeases: activeLeases,
-					Message:      fmt.Sprintf("Job '%s' timed out waiting for lease (waited %s, peak capacity during wait: %d/%d) - lease released", job.Job.Name, job.LeaseWaitTime, peakLeases, s.config.MaxActiveLeases),
+					Message:      fmt.Sprintf("Job '%s' timed out waiting for lease (never acquired, waited %s, peak: %d/%d)", job.Job.Name, job.LeaseWaitTime, peakLeases, s.config.MaxActiveLeases),
 					IsWarning:    true,
 					WasWaiting:   true,
 				})
